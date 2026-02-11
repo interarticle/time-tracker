@@ -26,7 +26,7 @@ const rowClasses = computed(() => {
   if (limitRatio.value !== null) {
     if (limitRatio.value >= 1) {
       c[running.value ? 'limit-exceeded-running' : 'limit-exceeded'] = true
-    } else if (limitRatio.value >= 0.8) {
+    } else if (limitRatio.value >= 0.8 && (subtreeLimitMs.value! - displayMs.value) <= 10 * 60 * 1000) {
       c[running.value ? 'limit-approaching-running' : 'limit-approaching'] = true
     }
   }
