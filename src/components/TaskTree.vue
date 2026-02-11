@@ -13,12 +13,14 @@ const tracker = inject(TimeTrackerKey)!
       <button class="add-root-btn" @click="tracker.addRoot()">+ Add Task</button>
     </div>
     <template v-else>
-      <TaskNode
-        v-for="root in tracker.tree.value.roots"
-        :key="root.id"
-        :node="root"
-        :depth="0"
-      />
+      <ul class="task-list">
+        <TaskNode
+          v-for="root in tracker.tree.value.roots"
+          :key="root.id"
+          :node="root"
+          :depth="0"
+        />
+      </ul>
       <button class="add-root-btn" @click="tracker.addRoot()">+ Add Task</button>
     </template>
   </div>
@@ -26,25 +28,33 @@ const tracker = inject(TimeTrackerKey)!
 
 <style scoped>
 .task-tree {
-  padding: 8px 0;
+  padding: 4px 0;
+}
+.task-list {
+  margin: 0;
+  padding: 0;
 }
 .empty-state {
   text-align: center;
-  padding: 40px 0;
-  color: #888;
+  padding: 48px 0;
+  color: #999;
+}
+.empty-state p {
+  margin: 0 0 12px;
 }
 .add-root-btn {
   margin-top: 8px;
   background: none;
   border: 1px dashed #ccc;
   border-radius: 4px;
-  padding: 6px 16px;
+  padding: 5px 16px;
   cursor: pointer;
-  color: #666;
-  font-size: 14px;
+  color: #888;
+  font-size: 13px;
+  transition: border-color 0.15s, color 0.15s;
 }
 .add-root-btn:hover {
   border-color: #999;
-  color: #333;
+  color: #444;
 }
 </style>

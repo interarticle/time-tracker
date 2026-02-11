@@ -13,20 +13,24 @@ const displayMs = computed(() =>
   isLeaf.value ? tracker.getDisplayMs(props.node.id) : tracker.getSubtreeMs(props.node),
 )
 const displayTime = computed(() => formatMs(displayMs.value))
-
-// Rolled-up limit (leaf: own limit, parent: sum of descendant limits)
 const subtreeLimitMs = computed(() => tracker.getSubtreeLimitMs(props.node))
 
-// Time limit highlights (works for both leaves and parents with rolled-up limits)
 const limitRatio = computed(() => {
   if (subtreeLimitMs.value === null || subtreeLimitMs.value <= 0) return null
   return displayMs.value / subtreeLimitMs.value
 })
-const limitClass = computed(() => {
-  if (limitRatio.value === null) return ''
-  if (limitRatio.value >= 1) return running.value ? 'limit-exceeded-running' : 'limit-exceeded'
-  if (limitRatio.value >= 0.8) return running.value ? 'limit-approaching-running' : 'limit-approaching'
-  return ''
+
+const rowClasses = computed(() => {
+  const c: Record<string, boolean> = {}
+  if (running.value) c['is-running'] = true
+  if (limitRatio.value !== null) {
+    if (limitRatio.value >= 1) {
+      c[running.value ? 'limit-exceeded-running' : 'limit-exceeded'] = true
+    } else if (limitRatio.value >= 0.8) {
+      c[running.value ? 'limit-approaching-running' : 'limit-approaching'] = true
+    }
+  }
+  return c
 })
 
 // Name editing
@@ -77,129 +81,201 @@ function commitLimit() {
   editingLimit.value = false
 }
 
-// Auto-focus for new (unnamed) nodes
 function onNameMounted(el: HTMLInputElement) {
-  if (!props.node.name) {
-    el.focus()
-  }
+  if (!props.node.name) el.focus()
 }
 </script>
 
 <template>
-  <div class="task-node" :class="limitClass">
-    <div class="node-row" :style="{ paddingLeft: depth * 20 + 'px' }">
-      <!-- Expand indicator for parents -->
-      <span v-if="!isLeaf" class="parent-indicator">&#9660;</span>
-      <span v-else class="leaf-indicator">&#8226;</span>
-
-      <!-- Name -->
-      <input
-        v-if="editingName || !node.name"
-        :ref="(el) => { if (el) onNameMounted(el as HTMLInputElement) }"
-        v-model="nameInput"
-        class="name-input"
-        placeholder="Task name..."
-        @blur="commitName"
-        @keydown.enter="($event.target as HTMLInputElement).blur()"
-        @keydown.escape="editingName = false"
-        @vue:mounted="() => { nameInput = node.name }"
-      />
-      <span v-else class="name-label" @click="startEditName">{{ node.name }}</span>
-
-      <!-- Time display -->
-      <span v-if="!editingTime" class="time-display" :class="{ clickable: isLeaf && !running && tracker.isToday.value }" @click="startEditTime">
-        {{ displayTime }}
-      </span>
-      <input
-        v-else
-        v-model="timeInput"
-        class="time-input"
-        @blur="commitTime"
-        @keydown.enter="($event.target as HTMLInputElement).blur()"
-        @keydown.escape="editingTime = false"
-        @vue:mounted="($event: any) => $event.el.focus()"
-      />
-
-      <!-- Time limit (editable on leaves, rolled-up display on parents) -->
-      <template v-if="isLeaf">
-        <span
-          v-if="!editingLimit"
-          class="limit-display"
-          :class="{ 'has-limit': node.timeLimitMs !== null }"
-          @click="startEditLimit"
-          :title="node.timeLimitMs !== null ? 'Limit: ' + formatMs(node.timeLimitMs) : 'Set limit'"
-        >
-          {{ node.timeLimitMs !== null ? '/' + formatMs(node.timeLimitMs) : '&#9201;' }}
-        </span>
+  <li>
+    <div class="task-row" :class="rowClasses">
+      <span class="col-name" :style="{ paddingLeft: depth * 20 + 'px' }">
+        <span class="node-icon" aria-hidden="true">{{ isLeaf ? '\u2022' : '\u25BE' }}</span>
         <input
-          v-else
-          v-model="limitInput"
-          class="time-input limit-input"
-          placeholder="HH:MM:SS or empty"
-          @blur="commitLimit"
+          v-if="editingName || !node.name"
+          :ref="(el) => { if (el) onNameMounted(el as HTMLInputElement) }"
+          v-model="nameInput"
+          class="name-input"
+          placeholder="Task name\u2026"
+          @blur="commitName"
           @keydown.enter="($event.target as HTMLInputElement).blur()"
-          @keydown.escape="editingLimit = false"
+          @keydown.escape="editingName = false"
+          @vue:mounted="() => { nameInput = node.name }"
+        />
+        <span v-else class="name-text" @click="startEditName">{{ node.name }}</span>
+      </span>
+
+      <span class="col-time">
+        <input
+          v-if="editingTime"
+          v-model="timeInput"
+          class="cell-input"
+          @blur="commitTime"
+          @keydown.enter="($event.target as HTMLInputElement).blur()"
+          @keydown.escape="editingTime = false"
           @vue:mounted="($event: any) => $event.el.focus()"
         />
-      </template>
-      <span
-        v-else-if="subtreeLimitMs !== null"
-        class="limit-display has-limit"
-        :title="'Subtree limit: ' + formatMs(subtreeLimitMs)"
-      >
-        /{{ formatMs(subtreeLimitMs) }}
+        <span
+          v-else
+          class="cell-text"
+          :class="{ editable: isLeaf && !running && tracker.isToday.value }"
+          @click="startEditTime"
+        >{{ displayTime }}</span>
       </span>
 
-      <!-- Timer buttons (only today, only leaves) -->
-      <template v-if="isLeaf && tracker.isToday.value">
-        <button v-if="!running" class="btn btn-start" @click="tracker.switchTimer(node.id)" title="Switch to this timer">&#9654;</button>
-        <button v-if="running" class="btn btn-stop" @click="tracker.stopTimer(node.id)" title="Stop">&#9632;</button>
-        <button v-if="!running" class="btn btn-share" @click="tracker.shareTimer(node.id)" title="Share time with running timers">&#43;</button>
-      </template>
+      <span class="col-limit">
+        <template v-if="isLeaf">
+          <input
+            v-if="editingLimit"
+            v-model="limitInput"
+            class="cell-input"
+            placeholder="HH:MM:SS"
+            @blur="commitLimit"
+            @keydown.enter="($event.target as HTMLInputElement).blur()"
+            @keydown.escape="editingLimit = false"
+            @vue:mounted="($event: any) => $event.el.focus()"
+          />
+          <span v-else-if="node.timeLimitMs !== null" class="cell-text limit-val" @click="startEditLimit">/{{ formatMs(node.timeLimitMs) }}</span>
+          <span v-else class="limit-set" @click="startEditLimit"></span>
+        </template>
+        <span v-else-if="subtreeLimitMs !== null" class="cell-text limit-val">/{{ formatMs(subtreeLimitMs) }}</span>
+      </span>
 
-      <!-- Structure buttons -->
-      <button class="btn btn-small" @click="tracker.addChild(node.id)" title="Add child">&#8627;</button>
-      <button class="btn btn-small" @click="tracker.addSibling(node.id)" title="Add sibling">&#8615;</button>
-      <button class="btn btn-small btn-delete" @click="tracker.deleteTask(node.id)" title="Delete">&times;</button>
+      <span class="col-controls">
+        <template v-if="isLeaf && tracker.isToday.value">
+          <button v-if="!running" class="btn btn-switch" @click="tracker.switchTimer(node.id)" title="Switch to this timer"></button>
+          <button v-if="running" class="btn btn-stop" @click="tracker.stopTimer(node.id)" title="Stop"></button>
+          <button v-if="!running" class="btn btn-share" @click="tracker.shareTimer(node.id)" title="Share time"></button>
+        </template>
+      </span>
+
+      <span class="col-struct">
+        <button class="btn btn-struct btn-add-child" @click="tracker.addChild(node.id)" title="Add child"></button>
+        <button class="btn btn-struct btn-add-sibling" @click="tracker.addSibling(node.id)" title="Add sibling"></button>
+        <button class="btn btn-struct btn-delete" @click="tracker.deleteTask(node.id)" title="Delete"></button>
+      </span>
     </div>
 
-    <!-- Recursive children -->
-    <TaskNode
-      v-for="child in node.children"
-      :key="child.id"
-      :node="child"
-      :depth="depth + 1"
-    />
-  </div>
+    <ul v-if="node.children.length > 0">
+      <TaskNode
+        v-for="child in node.children"
+        :key="child.id"
+        :node="child"
+        :depth="depth + 1"
+      />
+    </ul>
+  </li>
 </template>
 
 <style scoped>
-.task-node {
-  /* base styling for limit highlights */
+li {
+  list-style: none;
 }
-.node-row {
+ul {
+  margin: 0;
+  padding: 0;
+}
+
+/* ---- Row layout ---- */
+.task-row {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 1px 4px;
+  border-radius: 5px;
+  transition: background-color 0.15s;
+}
+.task-row:hover {
+  background-color: #f0f0f0;
+}
+
+/* ---- Running highlight (green, no flash) ---- */
+.task-row.is-running {
+  background-color: #e8f5e9;
+}
+.task-row.is-running:hover {
+  background-color: #c8e6c9;
+}
+
+/* ---- Limit highlights (override green) ---- */
+.task-row.limit-approaching {
+  background-color: #fff8e1;
+}
+.task-row.limit-exceeded {
+  background-color: #ffebee;
+}
+.task-row.limit-approaching-running {
+  animation: pulse-warn 1.5s ease-in-out infinite;
+}
+.task-row.limit-exceeded-running {
+  animation: pulse-danger 1s ease-in-out infinite;
+}
+
+@keyframes pulse-warn {
+  0%, 100% { background-color: #fff8e1; }
+  50% { background-color: #ffe082; }
+}
+@keyframes pulse-danger {
+  0%, 100% { background-color: #ffebee; }
+  50% { background-color: #ef9a9a; }
+}
+
+/* ---- Columns ---- */
+.col-name {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 4px;
-  min-height: 32px;
-  border-radius: 3px;
+  min-width: 0;
+  overflow: hidden;
 }
-.node-row:hover {
-  background: #f5f5f5;
-}
-.parent-indicator,
-.leaf-indicator {
-  width: 14px;
-  text-align: center;
-  font-size: 10px;
-  color: #999;
+.col-time {
+  width: 76px;
   flex-shrink: 0;
+  text-align: right;
+  padding: 0 4px;
 }
-.name-label {
+.col-limit {
+  width: 80px;
+  flex-shrink: 0;
+  text-align: right;
+  padding: 0 4px;
+}
+.col-controls {
+  width: 52px;
+  flex-shrink: 0;
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+  user-select: none;
+}
+.col-struct {
+  width: 64px;
+  flex-shrink: 0;
+  display: flex;
+  gap: 1px;
+  justify-content: flex-end;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.task-row:hover .col-struct {
+  opacity: 1;
+}
+
+/* ---- Node icon (not copyable) ---- */
+.node-icon {
+  width: 12px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 11px;
+  color: #aaa;
+  user-select: none;
+}
+
+/* ---- Name ---- */
+.name-text {
   cursor: pointer;
-  flex: 1;
-  min-width: 60px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -207,99 +283,84 @@ function onNameMounted(el: HTMLInputElement) {
 .name-input {
   flex: 1;
   min-width: 60px;
-  border: 1px solid #ccc;
+  border: 1px solid #bbb;
   border-radius: 3px;
-  padding: 2px 4px;
+  padding: 2px 6px;
   font: inherit;
+  outline: none;
 }
-.time-display {
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 14px;
-  min-width: 70px;
-  text-align: right;
-  color: #555;
+.name-input:focus {
+  border-color: #4a90d9;
 }
-.time-display.clickable {
+
+/* ---- Cell text (time / limit values) ---- */
+.cell-text {
+  display: block;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 13px;
+  color: #444;
+}
+.cell-text.editable {
   cursor: pointer;
-  text-decoration: underline dotted;
+  text-decoration: underline dotted #aaa;
 }
-.time-input {
-  width: 80px;
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 14px;
+.cell-text.limit-val {
+  color: #888;
+}
+.cell-input {
+  width: 100%;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 13px;
   border: 1px solid #4a90d9;
   border-radius: 3px;
-  padding: 2px 4px;
+  padding: 1px 4px;
   text-align: right;
+  outline: none;
 }
-.limit-input {
-  width: 100px;
-}
-.limit-display {
-  font-size: 12px;
-  color: #999;
+
+/* ---- Limit "set" affordance (icon only, not copyable) ---- */
+.limit-set {
+  display: block;
+  text-align: right;
   cursor: pointer;
-  min-width: 24px;
-  text-align: center;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 0.12s;
 }
-.limit-display.has-limit {
-  color: #777;
-  font-family: 'Courier New', Courier, monospace;
+.task-row:hover .limit-set {
+  opacity: 0.4;
 }
+.limit-set::before {
+  content: '\23F1';
+  font-size: 13px;
+}
+
+/* ---- Buttons (no text content — icons via ::before) ---- */
 .btn {
   border: none;
-  border-radius: 3px;
+  background: none;
   cursor: pointer;
-  padding: 2px 6px;
-  font-size: 14px;
-  background: #eee;
-  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 0.1s;
 }
 .btn:hover {
-  background: #ddd;
-}
-.btn-start {
-  color: #2a7d2a;
-}
-.btn-stop {
-  color: #c0392b;
-}
-.btn-share {
-  color: #4a90d9;
-}
-.btn-small {
-  font-size: 16px;
-  padding: 0 4px;
-  background: none;
-  color: #999;
-}
-.btn-small:hover {
-  color: #333;
-}
-.btn-delete:hover {
-  color: #c0392b;
+  background-color: rgba(0, 0, 0, 0.08);
 }
 
-/* Time limit highlights */
-.limit-approaching > .node-row {
-  background: #fff8e1;
-}
-.limit-exceeded > .node-row {
-  background: #ffebee;
-}
-.limit-approaching-running > .node-row {
-  animation: pulse-warning 1.5s ease-in-out infinite;
-}
-.limit-exceeded-running > .node-row {
-  animation: pulse-danger 1s ease-in-out infinite;
-}
+.btn-switch::before { content: '\25B6'; color: #2e7d32; font-size: 10px; }
+.btn-stop::before   { content: '\25A0'; color: #c62828; font-size: 12px; }
+.btn-share::before  { content: '+';     color: #1565c0; font-size: 15px; font-weight: 700; }
 
-@keyframes pulse-warning {
-  0%, 100% { background: #fff8e1; }
-  50% { background: #fff3c4; }
-}
-@keyframes pulse-danger {
-  0%, 100% { background: #ffebee; }
-  50% { background: #ffcdd2; }
-}
+.btn-struct { color: #aaa; }
+.btn-add-child::before   { content: '\21B3'; font-size: 14px; }
+.btn-add-sibling::before { content: '\2193'; font-size: 14px; }
+.btn-delete::before      { content: '\00D7'; font-size: 16px; }
+.btn-struct:hover         { color: #555; }
+.btn-delete:hover         { color: #c62828 !important; }
 </style>

@@ -46,59 +46,63 @@ const totalDayLimitMs = computed(() => tracker.getTotalDayLimitMs())
 }
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 15px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  font-size: 14px;
   color: #222;
   background: #fafafa;
+  -webkit-font-smoothing: antialiased;
 }
 </style>
 
 <style scoped>
 .app {
-  max-width: 800px;
+  max-width: 860px;
   margin: 0 auto;
   padding: 12px 16px;
 }
 .header {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 10px;
+  margin-bottom: 6px;
 }
 .header h1 {
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
+  letter-spacing: -0.3px;
 }
 .day-total {
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 16px;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 15px;
   font-weight: 600;
   display: flex;
-  gap: 2px;
+  gap: 1px;
 }
 .total-time {
   color: #333;
 }
 .total-limit {
-  color: #888;
+  color: #999;
 }
 .header-actions {
   margin-left: auto;
 }
 .stop-all-btn {
-  background: #c0392b;
+  background: #c62828;
   color: white;
   border: none;
   border-radius: 4px;
   padding: 4px 12px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 0.15s;
 }
 .stop-all-btn:hover {
-  background: #a93226;
+  background: #b71c1c;
 }
 </style>
