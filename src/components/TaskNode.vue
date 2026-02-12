@@ -89,27 +89,26 @@ function onNameMounted(el: HTMLInputElement) {
 <template>
   <li>
     <div class="task-row" :class="rowClasses">
-      <!--
-        Single block with inline-block children.
-        Browsers serialize inline content on one line when copying.
-      -->
-      <span class="row-content">
+      <!-- Left: tree-indented name -->
+      <span class="row-left">
         <span class="indent" :style="{ width: depth * 20 + 'px' }" aria-hidden="true"></span>
         <span class="node-icon" aria-hidden="true">{{ isLeaf ? '\u2022' : '\u25BE' }}</span>
-        <span class="name-cell">
-          <input
-            v-if="editingName || !node.name"
-            :ref="(el) => { if (el) onNameMounted(el as HTMLInputElement) }"
-            v-model="nameInput"
-            class="cell-input name-input"
-            placeholder="Task name\u2026"
-            @blur="commitName"
-            @keydown.enter="($event.target as HTMLInputElement).blur()"
-            @keydown.escape="editingName = false"
-            @vue:mounted="() => { nameInput = node.name }"
-          />
-          <span v-else class="name-text" @click="startEditName">{{ node.name }}</span>
-        </span>
+        <input
+          v-if="editingName || !node.name"
+          :ref="(el) => { if (el) onNameMounted(el as HTMLInputElement) }"
+          v-model="nameInput"
+          class="name-input"
+          placeholder="Task name\u2026"
+          @blur="commitName"
+          @keydown.enter="($event.target as HTMLInputElement).blur()"
+          @keydown.escape="editingName = false"
+          @vue:mounted="() => { nameInput = node.name }"
+        />
+        <span v-else class="name-text" @click="startEditName">{{ node.name }}</span>
+      </span>
+
+      <!-- Right: time + limit, then reverse-indent gap, then fixed-width controls -->
+      <span class="row-right">
         <span class="time-cell">
           <input
             v-if="editingTime"
@@ -144,15 +143,16 @@ function onNameMounted(el: HTMLInputElement) {
           </template>
           <span v-else-if="subtreeLimitMs !== null" class="limit-text">/{{ formatMs(subtreeLimitMs) }}</span>
         </span>
-      </span>
-
-      <!-- Actions: user-select:none, button icons via ::before (nothing to copy) -->
-      <span class="row-actions">
-        <template v-if="isLeaf && tracker.isToday.value">
-          <button v-if="!running" class="btn btn-switch" @click="tracker.switchTimer(node.id)" title="Switch"></button>
-          <button v-if="running" class="btn btn-stop" @click="tracker.stopTimer(node.id)" title="Stop"></button>
-          <button v-if="!running" class="btn btn-share" @click="tracker.shareTimer(node.id)" title="Share"></button>
-        </template>
+        <!-- Reverse indent: shallower = wider gap, deeper = narrower (flush with controls) -->
+        <span class="reverse-indent" :style="{ width: Math.max(0, 4 - depth) * 20 + 'px' }"></span>
+        <!-- Fixed-width button areas so controls never shift -->
+        <span class="timer-btns">
+          <template v-if="isLeaf && tracker.isToday.value">
+            <button v-if="!running" class="btn btn-switch" @click="tracker.switchTimer(node.id)" title="Switch"></button>
+            <button v-if="running" class="btn btn-stop" @click="tracker.stopTimer(node.id)" title="Stop"></button>
+            <button v-if="!running" class="btn btn-share" @click="tracker.shareTimer(node.id)" title="Share"></button>
+          </template>
+        </span>
         <span class="struct-btns">
           <button class="btn btn-struct btn-add-child" @click="tracker.addChild(node.id)" title="Add child"></button>
           <button class="btn btn-struct btn-add-sibling" @click="tracker.addSibling(node.id)" title="Add sibling"></button>
@@ -206,54 +206,60 @@ ul { margin: 0; padding: 0; }
   50% { background-color: #ef9a9a; }
 }
 
-/* ---- Content (single block, inline children → copies as one line) ---- */
-.row-content {
+/* ---- Left: name area ---- */
+.row-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
   white-space: nowrap;
   line-height: 30px;
 }
-.indent {
-  display: inline-block;
-  user-select: none;
-}
+.indent { flex-shrink: 0; }
 .node-icon {
-  display: inline-block;
+  flex-shrink: 0;
   width: 14px;
   text-align: center;
   font-size: 11px;
   color: #aaa;
   user-select: none;
-  vertical-align: middle;
-}
-
-/* ---- Name ---- */
-.name-cell {
-  display: inline-block;
-  width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: middle;
 }
 .name-text {
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .name-input {
-  width: 100%;
+  flex: 1;
+  min-width: 60px;
+  border: 1px solid #bbb;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font: inherit;
+  outline: none;
 }
+.name-input:focus { border-color: #4a90d9; }
+
+/* ---- Right: times → gap → controls ---- */
+.row-right {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.reverse-indent { flex-shrink: 0; }
 
 /* ---- Time / Limit cells ---- */
 .time-cell {
-  display: inline-block;
   width: 72px;
+  flex-shrink: 0;
   text-align: right;
-  vertical-align: middle;
-  margin-left: 6px;
 }
 .limit-cell {
-  display: inline-block;
   width: 76px;
+  flex-shrink: 0;
   text-align: right;
-  vertical-align: middle;
+  margin-left: 2px;
 }
 .time-text, .limit-text {
   font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
@@ -289,26 +295,25 @@ ul { margin: 0; padding: 0; }
   text-align: right;
   outline: none;
 }
-.cell-input.name-input {
-  font-family: inherit;
-  text-align: left;
-}
 
-/* ---- Actions (not copyable) ---- */
-.row-actions {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  margin-left: auto;
-  user-select: none;
+/* ---- Fixed-width button containers (no shift) ---- */
+.timer-btns {
+  width: 46px;
   flex-shrink: 0;
+  display: flex;
+  gap: 1px;
+  justify-content: center;
+  user-select: none;
 }
 .struct-btns {
+  width: 68px;
+  flex-shrink: 0;
   display: flex;
   gap: 1px;
+  justify-content: flex-end;
+  user-select: none;
   opacity: 0;
   transition: opacity 0.12s;
-  margin-left: 2px;
 }
 .task-row:hover .struct-btns { opacity: 1; }
 
