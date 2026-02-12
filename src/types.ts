@@ -62,7 +62,6 @@ export interface TimeTracker {
   now: import('vue').Ref<number>
 
   // Notifications
-  requestNotificationPermission: () => Promise<void>
   sendTestNotification: () => void
 }
 

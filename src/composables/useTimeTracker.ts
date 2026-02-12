@@ -321,7 +321,7 @@ export function useTimeTracker(): TimeTracker {
   }
 
   function checkNotifications() {
-    if (!isToday.value || typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    if (!isToday.value) return
     for (const id of dayState.value.runningTimerIds) {
       const node = findNode(tree.value.roots, id)
       if (!node || !isLeaf(node) || node.timeLimitMs === null || node.timeLimitMs <= 0) continue
@@ -333,14 +333,10 @@ export function useTimeTracker(): TimeTracker {
 
       if (ms >= limit && !state.exceeded) {
         state.exceeded = true
-        new Notification(`\u26A0\uFE0F ${node.name} — time limit exceeded!`, {
-          body: `${formatMs(ms)} / ${formatMs(limit)}`,
-        })
+        alert(`\u26A0\uFE0F ${node.name} — time limit exceeded!\n${formatMs(ms)} / ${formatMs(limit)}`)
       } else if (isInWarningZone(ms, limit) && !state.warning) {
         state.warning = true
-        new Notification(`\u23F0 ${node.name} — approaching limit`, {
-          body: `${formatMs(ms)} / ${formatMs(limit)}`,
-        })
+        alert(`\u23F0 ${node.name} — approaching limit\n${formatMs(ms)} / ${formatMs(limit)}`)
       }
     }
   }
@@ -361,28 +357,8 @@ export function useTimeTracker(): TimeTracker {
     if (!isInWarningZone(ms, limit)) state.warning = false
   }
 
-  async function requestNotificationPermission(): Promise<void> {
-    if (typeof Notification === 'undefined') return
-    if (Notification.permission === 'default') {
-      await Notification.requestPermission()
-    }
-  }
-
   function sendTestNotification(): void {
-    if (typeof Notification === 'undefined') return
-    if (Notification.permission === 'granted') {
-      new Notification('\u2705 Time Tracker — notifications working!', {
-        body: 'You will be notified when timers approach or exceed their limits.',
-      })
-    } else if (Notification.permission === 'default') {
-      Notification.requestPermission().then((perm) => {
-        if (perm === 'granted') {
-          new Notification('\u2705 Time Tracker — notifications enabled!', {
-            body: 'You will be notified when timers approach or exceed their limits.',
-          })
-        }
-      })
-    }
+    alert('\u2705 Time Tracker — notifications working!\nYou will be alerted when timers approach or exceed their limits.')
   }
 
   // --- Tick interval for live updates ---
@@ -464,7 +440,6 @@ export function useTimeTracker(): TimeTracker {
     getTotalDayLimitMs,
     isRunning,
     now,
-    requestNotificationPermission,
     sendTestNotification,
   }
 }
