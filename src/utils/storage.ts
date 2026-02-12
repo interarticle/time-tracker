@@ -1,12 +1,12 @@
 import type { TaskTreeData, DayTimerState, MetaData } from '@/types'
 
-const TREE_KEY = 'tt:tree'
+const TREE_PREFIX = 'tt:tree:'
 const DAY_PREFIX = 'tt:day:'
 const META_KEY = 'tt:meta'
 
-export function loadTree(): TaskTreeData {
+export function loadTree(dateKey: string): TaskTreeData {
   try {
-    const raw = localStorage.getItem(TREE_KEY)
+    const raw = localStorage.getItem(TREE_PREFIX + dateKey)
     if (raw) return JSON.parse(raw)
   } catch {
     // ignore
@@ -14,8 +14,8 @@ export function loadTree(): TaskTreeData {
   return { roots: [], version: 1 }
 }
 
-export function saveTree(tree: TaskTreeData): void {
-  localStorage.setItem(TREE_KEY, JSON.stringify(tree))
+export function saveTree(dateKey: string, tree: TaskTreeData): void {
+  localStorage.setItem(TREE_PREFIX + dateKey, JSON.stringify(tree))
 }
 
 export function loadDayState(dateKey: string): DayTimerState {

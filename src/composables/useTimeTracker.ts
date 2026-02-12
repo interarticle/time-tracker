@@ -52,11 +52,11 @@ export function useTimeTracker(): TimeTracker {
     currentDateKey.value = todayKey()
   }
 
-  // --- Task tree ---
-  const tree = ref<TaskTreeData>(loadTree())
+  // --- Task tree (per-day) ---
+  const tree = ref<TaskTreeData>(loadTree(currentDateKey.value))
 
   function persistTree() {
-    saveTree(tree.value)
+    saveTree(currentDateKey.value, tree.value)
   }
 
   function addRoot() {
@@ -169,8 +169,9 @@ export function useTimeTracker(): TimeTracker {
     saveDayState(currentDateKey.value, dayState.value)
   }
 
-  // Reload day state when date changes
+  // Reload tree and day state when date changes
   watch(currentDateKey, (newKey) => {
+    tree.value = loadTree(newKey)
     dayState.value = loadDayState(newKey)
   })
 
