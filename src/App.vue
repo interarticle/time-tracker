@@ -23,6 +23,7 @@ const totalDayLimitMs = computed(() => tracker.getTotalDayLimitMs())
         <span v-if="totalDayLimitMs !== null" class="total-limit">/{{ formatMs(totalDayLimitMs) }}</span>
       </div>
       <div class="header-actions">
+        <button class="notif-btn" @click="tracker.sendTestNotification()" title="Test notifications">&#x1F514;</button>
         <button
           v-if="tracker.isToday.value && tracker.dayState.value.runningTimerIds.length > 0"
           class="stop-all-btn"
@@ -90,6 +91,21 @@ body {
 }
 .header-actions {
   margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.notif-btn {
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.15s;
+}
+.notif-btn:hover {
+  background: #f0f0f0;
 }
 .stop-all-btn {
   background: #c62828;

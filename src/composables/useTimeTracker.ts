@@ -1,6 +1,6 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import type { TaskNode, TaskTreeData, DayTimerState, TimeTracker } from '@/types'
-import { todayKey, addDays, formatDateDisplay } from '@/utils/format'
+import { todayKey, addDays, formatDateDisplay, formatMs } from '@/utils/format'
 import { loadTree, saveTree, loadDayState, saveDayState, saveMeta } from '@/utils/storage'
 
 let idCounter = Date.now()
@@ -159,6 +159,7 @@ export function useTimeTracker(): TimeTracker {
     if (node) {
       node.timeLimitMs = limitMs
       persistTree()
+      clearNotificationState(nodeId)
     }
   }
 
@@ -246,6 +247,7 @@ export function useTimeTracker(): TimeTracker {
     }
     dayState.value.timers[id].accumulatedMs = ms
     persistDayState()
+    clearNotificationState(id)
   }
 
   // --- Display helpers ---
@@ -305,9 +307,88 @@ export function useTimeTracker(): TimeTracker {
     return dayState.value.runningTimerIds.includes(id)
   }
 
+  // --- Notifications ---
+  // Per-leaf tracking: has warning/exceeded notification been shown this session?
+  const notified = ref<Record<string, { warning: boolean; exceeded: boolean }>>({})
+
+  // Reset notification state on date change
+  watch(currentDateKey, () => {
+    notified.value = {}
+  })
+
+  function isInWarningZone(ms: number, limitMs: number): boolean {
+    return ms / limitMs >= 0.8 && (limitMs - ms) <= 10 * 60 * 1000
+  }
+
+  function checkNotifications() {
+    if (!isToday.value || typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    for (const id of dayState.value.runningTimerIds) {
+      const node = findNode(tree.value.roots, id)
+      if (!node || !isLeaf(node) || node.timeLimitMs === null || node.timeLimitMs <= 0) continue
+
+      const ms = getDisplayMs(id)
+      const limit = node.timeLimitMs
+      if (!notified.value[id]) notified.value[id] = { warning: false, exceeded: false }
+      const state = notified.value[id]
+
+      if (ms >= limit && !state.exceeded) {
+        state.exceeded = true
+        new Notification(`\u26A0\uFE0F ${node.name} — time limit exceeded!`, {
+          body: `${formatMs(ms)} / ${formatMs(limit)}`,
+        })
+      } else if (isInWarningZone(ms, limit) && !state.warning) {
+        state.warning = true
+        new Notification(`\u23F0 ${node.name} — approaching limit`, {
+          body: `${formatMs(ms)} / ${formatMs(limit)}`,
+        })
+      }
+    }
+  }
+
+  /** Clear stale notification flags when limit or time is edited */
+  function clearNotificationState(id: string) {
+    const state = notified.value[id]
+    if (!state) return
+    const node = findNode(tree.value.roots, id)
+    if (!node || node.timeLimitMs === null || node.timeLimitMs <= 0) {
+      state.warning = false
+      state.exceeded = false
+      return
+    }
+    const ms = getDisplayMs(id)
+    const limit = node.timeLimitMs
+    if (ms < limit) state.exceeded = false
+    if (!isInWarningZone(ms, limit)) state.warning = false
+  }
+
+  async function requestNotificationPermission(): Promise<void> {
+    if (typeof Notification === 'undefined') return
+    if (Notification.permission === 'default') {
+      await Notification.requestPermission()
+    }
+  }
+
+  function sendTestNotification(): void {
+    if (typeof Notification === 'undefined') return
+    if (Notification.permission === 'granted') {
+      new Notification('\u2705 Time Tracker — notifications working!', {
+        body: 'You will be notified when timers approach or exceed their limits.',
+      })
+    } else if (Notification.permission === 'default') {
+      Notification.requestPermission().then((perm) => {
+        if (perm === 'granted') {
+          new Notification('\u2705 Time Tracker — notifications enabled!', {
+            body: 'You will be notified when timers approach or exceed their limits.',
+          })
+        }
+      })
+    }
+  }
+
   // --- Tick interval for live updates ---
   const tickInterval = setInterval(() => {
     now.value = Date.now()
+    checkNotifications()
   }, 200)
 
   // --- Periodic persistence (every ~10s when timers running) ---
@@ -383,5 +464,7 @@ export function useTimeTracker(): TimeTracker {
     getTotalDayLimitMs,
     isRunning,
     now,
+    requestNotificationPermission,
+    sendTestNotification,
   }
 }

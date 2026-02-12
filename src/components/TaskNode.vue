@@ -20,6 +20,20 @@ const limitRatio = computed(() => {
   return displayMs.value / subtreeLimitMs.value
 })
 
+// Percentage of day totals (root nodes only)
+const timePct = computed(() => {
+  if (props.depth !== 0) return null
+  const total = tracker.getTotalDayMs()
+  if (total <= 0) return null
+  return Math.round((displayMs.value / total) * 100)
+})
+const limitPct = computed(() => {
+  if (props.depth !== 0) return null
+  const totalLimit = tracker.getTotalDayLimitMs()
+  if (totalLimit === null || totalLimit <= 0 || subtreeLimitMs.value === null) return null
+  return Math.round((subtreeLimitMs.value / totalLimit) * 100)
+})
+
 const rowClasses = computed(() => {
   const c: Record<string, boolean> = {}
   if (running.value) c['is-running'] = true
@@ -126,6 +140,7 @@ function onNameMounted(el: HTMLInputElement) {
             @click="startEditTime"
           >{{ displayTime }}</span>
         </span>
+        <span v-if="timePct !== null" class="pct-cell time-pct">{{ timePct }}%</span>
         <span class="limit-cell">
           <template v-if="isLeaf">
             <input
@@ -143,6 +158,7 @@ function onNameMounted(el: HTMLInputElement) {
           </template>
           <span v-else-if="subtreeLimitMs !== null" class="limit-text">/{{ formatMs(subtreeLimitMs) }}</span>
         </span>
+        <span v-if="limitPct !== null" class="pct-cell limit-pct">{{ limitPct }}%</span>
         <!-- Reverse indent: shallower = wider gap, deeper = narrower (flush with controls) -->
         <span class="reverse-indent" :style="{ width: Math.max(0, 4 - depth) * 20 + 'px' }"></span>
         <!-- Fixed-width button areas so controls never shift -->
@@ -283,6 +299,17 @@ ul { margin: 0; padding: 0; }
 }
 .task-row:hover .limit-set { opacity: 0.4; }
 .limit-set::before { content: '\23F1'; font-size: 12px; }
+
+/* ---- Percentage cells (root only) ---- */
+.pct-cell {
+  width: 36px;
+  flex-shrink: 0;
+  text-align: right;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+}
+.time-pct { color: #666; }
+.limit-pct { color: #aaa; }
 
 .cell-input {
   width: 100%;

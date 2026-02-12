@@ -60,6 +60,10 @@ export interface TimeTracker {
   getTotalDayLimitMs: () => number | null
   isRunning: (id: string) => boolean
   now: import('vue').Ref<number>
+
+  // Notifications
+  requestNotificationPermission: () => Promise<void>
+  sendTestNotification: () => void
 }
 
 export const TimeTrackerKey: InjectionKey<TimeTracker> = Symbol('TimeTracker')
