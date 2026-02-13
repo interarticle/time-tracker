@@ -112,7 +112,7 @@ function onNameMounted(el: HTMLInputElement) {
           :ref="(el) => { if (el) onNameMounted(el as HTMLInputElement) }"
           v-model="nameInput"
           class="name-input"
-          placeholder="Task name\u2026"
+          placeholder="Task name…"
           @blur="commitName"
           @keydown.enter="($event.target as HTMLInputElement).blur()"
           @keydown.escape="editingName = false"
