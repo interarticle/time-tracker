@@ -63,7 +63,7 @@ function commitName() {
 const editingTime = ref(false)
 const timeInput = ref('')
 function startEditTime() {
-  if (!isLeaf.value || running.value || !tracker.isToday.value) return
+  if (!isLeaf.value || running.value) return
   editingTime.value = true
   timeInput.value = displayTime.value
 }
@@ -136,7 +136,7 @@ function onNameMounted(el: HTMLInputElement) {
           <span
             v-else
             class="time-text"
-            :class="{ editable: isLeaf && !running && tracker.isToday.value }"
+            :class="{ editable: isLeaf && !running }"
             @click="startEditTime"
           >{{ displayTime }}</span>
         </span>
