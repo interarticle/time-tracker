@@ -365,6 +365,7 @@ export function useTimeTracker(): TimeTracker {
   const tickInterval = setInterval(() => {
     now.value = Date.now()
     checkNotifications()
+    updatePipContent()
   }, 200)
 
   // --- Periodic persistence (every ~10s when timers running) ---
@@ -407,10 +408,120 @@ export function useTimeTracker(): TimeTracker {
   // Save meta on init
   saveMeta({ lastOpenDate: todayKey() })
 
+  // --- Picture-in-Picture ---
+  let pipWin: Window | null = null
+
+  function buildPipContent(win: Window) {
+    const doc = win.document
+    const style = doc.createElement('style')
+    style.textContent = `
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fff; color: #222; padding: 10px; font-size: 13px; height: 100vh; display: flex; flex-direction: column; gap: 8px; }
+      #pip-tasks { flex: 1; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+      .pip-task { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 5px; background: #f5f5f5; }
+      .pip-task.is-warning { background: #fff8e1; animation: pw 1.5s ease-in-out infinite; }
+      .pip-task.is-exceeded { background: #ffebee; animation: pd 1s ease-in-out infinite; }
+      .pip-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .pip-time { font-family: monospace; font-size: 13px; color: #333; flex-shrink: 0; }
+      .pip-limit { font-family: monospace; font-size: 12px; color: #999; flex-shrink: 0; }
+      #pip-stop { background: #c62828; color: #fff; border: none; border-radius: 4px; padding: 6px; cursor: pointer; font-size: 12px; font-weight: 500; width: 100%; flex-shrink: 0; }
+      #pip-stop:hover { background: #b71c1c; }
+      @keyframes pw { 0%,100% { background:#fff8e1; } 50% { background:#ffe082; } }
+      @keyframes pd { 0%,100% { background:#ffebee; } 50% { background:#ef9a9a; } }
+    `
+    doc.head.appendChild(style)
+    const tasks = doc.createElement('div')
+    tasks.id = 'pip-tasks'
+    const stopBtn = doc.createElement('button')
+    stopBtn.id = 'pip-stop'
+    stopBtn.textContent = 'Stop All'
+    stopBtn.addEventListener('click', () => stopAll())
+    doc.body.appendChild(tasks)
+    doc.body.appendChild(stopBtn)
+  }
+
+  function updatePipContent() {
+    if (!pipWin || pipWin.closed) return
+    const doc = pipWin.document
+    const tasksEl = doc.getElementById('pip-tasks')
+    if (!tasksEl) return
+
+    const ids = dayState.value.runningTimerIds
+    const activeSet = new Set(ids)
+
+    // Remove rows for timers no longer running
+    tasksEl.querySelectorAll<HTMLElement>('[data-id]').forEach(el => {
+      if (!activeSet.has(el.dataset.id!)) el.remove()
+    })
+
+    for (const id of ids) {
+      const node = findNode(tree.value.roots, id)
+      if (!node) continue
+      const ms = getDisplayMs(id)
+      const limit = node.timeLimitMs
+
+      let cls = 'pip-task'
+      if (limit !== null && limit > 0) {
+        if (ms >= limit) cls += ' is-exceeded'
+        else if (isInWarningZone(ms, limit)) cls += ' is-warning'
+      }
+
+      let row = tasksEl.querySelector<HTMLElement>(`[data-id="${id}"]`)
+      if (!row) {
+        row = doc.createElement('div')
+        row.dataset.id = id
+        const nameEl = doc.createElement('span'); nameEl.className = 'pip-name'
+        const timeEl = doc.createElement('span'); timeEl.className = 'pip-time'
+        const limitEl = doc.createElement('span'); limitEl.className = 'pip-limit'
+        row.appendChild(nameEl); row.appendChild(timeEl); row.appendChild(limitEl)
+        tasksEl.appendChild(row)
+      }
+
+      row.className = cls;
+      (row.querySelector('.pip-name') as HTMLElement).textContent = node.name;
+      (row.querySelector('.pip-time') as HTMLElement).textContent = formatMs(ms);
+      (row.querySelector('.pip-limit') as HTMLElement).textContent = limit !== null ? '/' + formatMs(limit) : ''
+    }
+  }
+
+  async function openPip(): Promise<void> {
+    if (!('documentPictureInPicture' in window)) return
+    if (pipWin && !pipWin.closed) return
+    try {
+      pipWin = await (window as any).documentPictureInPicture.requestWindow({ width: 300, height: 180, disallowReturnToOpener: true })
+      buildPipContent(pipWin!)
+      updatePipContent()
+      pipWin!.addEventListener('pagehide', () => { pipWin = null })
+    } catch {
+      pipWin = null
+    }
+  }
+
+  function closePip(): void {
+    if (pipWin && !pipWin.closed) pipWin.close()
+    pipWin = null
+  }
+
+  watch(() => dayState.value.runningTimerIds.length, (len) => {
+    if (len === 0) closePip()
+  })
+
+  // Open PiP when switching away from the tab (Meet-style), close when returning
+  function onVisibilityChange() {
+    if (document.visibilityState === 'hidden') {
+      if (dayState.value.runningTimerIds.length > 0) openPip().catch(() => {})
+    } else {
+      closePip()
+    }
+  }
+  document.addEventListener('visibilitychange', onVisibilityChange)
+
   onUnmounted(() => {
     clearInterval(tickInterval)
     clearInterval(persistInterval)
     clearInterval(midnightInterval)
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    closePip()
   })
 
   return {
@@ -441,5 +552,6 @@ export function useTimeTracker(): TimeTracker {
     isRunning,
     now,
     sendTestNotification,
+    openPip,
   }
 }

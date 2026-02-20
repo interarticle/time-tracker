@@ -63,6 +63,9 @@ export interface TimeTracker {
 
   // Notifications
   sendTestNotification: () => void
+
+  // Picture-in-Picture
+  openPip: () => Promise<void>
 }
 
 export const TimeTrackerKey: InjectionKey<TimeTracker> = Symbol('TimeTracker')
