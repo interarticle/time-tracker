@@ -488,6 +488,7 @@ export function useTimeTracker(): TimeTracker {
     if (!('documentPictureInPicture' in window)) return
     if (pipWin && !pipWin.closed) return
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       pipWin = await (window as any).documentPictureInPicture.requestWindow({ width: 300, height: 180, disallowReturnToOpener: true })
       buildPipContent(pipWin!)
       updatePipContent()

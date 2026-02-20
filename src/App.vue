@@ -7,6 +7,7 @@ import DateNav from '@/components/DateNav.vue'
 import TaskTree from '@/components/TaskTree.vue'
 
 const tracker = useTimeTracker()
+const buildInfo = `${__COMMIT__} · built on ${__BUILD_TIME__}`
 provide(TimeTrackerKey, tracker)
 
 const totalDayMs = computed(() => tracker.getTotalDayMs())
@@ -36,6 +37,7 @@ const totalDayLimitMs = computed(() => tracker.getTotalDayLimitMs())
     <main>
       <TaskTree />
     </main>
+    <footer class="build-info">{{ buildInfo }}</footer>
   </div>
 </template>
 
@@ -120,5 +122,12 @@ body {
 }
 .stop-all-btn:hover {
   background: #b71c1c;
+}
+.build-info {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 11px;
+  color: #bbb;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
 }
 </style>
