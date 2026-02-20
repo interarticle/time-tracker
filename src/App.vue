@@ -13,6 +13,9 @@ provide(TimeTrackerKey, tracker)
 const totalDayMs = computed(() => tracker.getTotalDayMs())
 const totalDayLimitMs = computed(() => tracker.getTotalDayLimitMs())
 
+// --- Help dialog ---
+const showHelpDialog = ref(false)
+
 // --- Data dialog ---
 const showDataDialog = ref(false)
 const importText = ref('')
@@ -62,6 +65,7 @@ function importData() {
         <span v-if="totalDayLimitMs !== null" class="total-limit">/{{ formatMs(totalDayLimitMs) }}</span>
       </div>
       <div class="header-actions">
+        <button class="icon-btn" @click="showHelpDialog = true" title="Help">?</button>
         <button class="icon-btn" @click="openDataDialog" title="Import / Export">&#x1F4BE;</button>
         <button class="icon-btn" @click="tracker.sendTestNotification()" title="Test notifications">&#x1F514;</button>
         <button
@@ -78,6 +82,86 @@ function importData() {
     </main>
     <footer class="build-info">{{ buildInfo }}</footer>
   </div>
+
+  <!-- Help dialog -->
+  <Teleport to="body">
+    <div v-if="showHelpDialog" class="overlay" @click.self="showHelpDialog = false">
+      <div class="dialog help-dialog">
+        <div class="dialog-header">
+          <span class="dialog-title">How Time Tracker works</span>
+          <button class="dialog-close" @click="showHelpDialog = false">&#x00D7;</button>
+        </div>
+        <div class="help-body">
+
+          <section>
+            <h3>Task tree</h3>
+            <p>Tasks are organised as a tree. Rows marked <kbd>●</kbd> are <strong>leaves</strong> — only leaves can run timers. Rows marked <kbd>▾</kbd> are <strong>parents</strong> and show rolled-up totals from all their descendants.</p>
+          </section>
+
+          <section>
+            <h3>Rollups</h3>
+            <p>A parent's time column shows the <strong>sum of all leaf times</strong> in its subtree. A parent's limit column shows the <strong>sum of all leaf limits</strong> in its subtree (only leaves that have a limit are counted). Root-level rows also show two percentages: <em>time %</em> (share of total day time) and <em>limit %</em> (share of total day limits).</p>
+          </section>
+
+          <section>
+            <h3>Adding a subtask to a leaf</h3>
+            <p>When you press <kbd>↳</kbd> on a leaf that already has accumulated time, that leaf becomes a parent and its accumulated time is <strong>automatically transferred to the new first child</strong>. Any running timer is stopped first. Subsequent children added to the same parent start at zero.</p>
+            <p><strong>Warning:</strong> if you later delete that first child, its transferred time is permanently lost — it is not returned to the parent.</p>
+          </section>
+
+          <section>
+            <h3>Timer buttons</h3>
+            <table class="help-table">
+              <tr><td><kbd>▶</kbd></td><td><strong>Switch</strong> — stop all running timers and start this one exclusively.</td></tr>
+              <tr><td><kbd>■</kbd></td><td><strong>Stop</strong> — stop this timer.</td></tr>
+              <tr><td><kbd>+</kbd></td><td><strong>Share</strong> — start this timer alongside any currently running timers. Elapsed time is divided equally among all running timers on every tick.</td></tr>
+            </table>
+          </section>
+
+          <section>
+            <h3>Shared / parallel timers</h3>
+            <p>When multiple timers run simultaneously (via Share), each tick's elapsed time is split equally among all running timers. For example, two timers running for 10 minutes each record 5 minutes apiece. This models time spent across parallel activities.</p>
+          </section>
+
+          <section>
+            <h3>Structure buttons</h3>
+            <table class="help-table">
+              <tr><td><kbd>↳</kbd></td><td><strong>Add child</strong> — nest a new task under this one.</td></tr>
+              <tr><td><kbd>↓</kbd></td><td><strong>Add sibling</strong> — add a new task at the same level, below this one.</td></tr>
+              <tr><td><kbd>×</kbd></td><td><strong>Delete</strong> — remove this task and all its children. Timer data for deleted tasks is also removed from the day state.</td></tr>
+            </table>
+            <p>Structure buttons appear on hover.</p>
+          </section>
+
+          <section>
+            <h3>Time limits &amp; warnings</h3>
+            <p>Click the limit column on any leaf to set a limit (<code>H:MM:SS</code> format, leave blank to clear). A row pulses <span class="swatch warn">yellow</span> when <strong>≥ 80 % used and ≤ 10 minutes remaining</strong>. It pulses <span class="swatch danger">red</span> when the limit is exceeded.</p>
+          </section>
+
+          <section>
+            <h3>Editing time</h3>
+            <p>Click the time column on a <strong>stopped</strong> leaf to edit its accumulated time directly. This works on both today and past dates.</p>
+          </section>
+
+          <section>
+            <h3>Date navigation</h3>
+            <p>Use <kbd>←</kbd> <kbd>→</kbd> to browse days. Each day has its own independent task tree and timer data — changing today's tree does not affect yesterday's. You can edit past-day times but cannot start timers on past dates.</p>
+          </section>
+
+          <section>
+            <h3>Picture-in-Picture</h3>
+            <p>When you switch to another browser tab with timers running, a floating PiP window appears showing all active counters, their limits, and a Stop All button. It closes automatically when you return to this tab or all timers stop.</p>
+          </section>
+
+          <section>
+            <h3>Import / Export</h3>
+            <p>The <kbd>💾</kbd> button exports all data as a single JSON object keyed by localStorage key (<code>tt:tree:YYYY-MM-DD</code>, <code>tt:day:YYYY-MM-DD</code>, <code>tt:meta</code>). Paste edited JSON back and click <em>Import &amp; reload</em> to restore. Useful for backups or moving data between browsers.</p>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  </Teleport>
 
   <!-- Data dialog -->
   <Teleport to="body">
@@ -281,4 +365,59 @@ body {
   color: #fff;
 }
 .btn-import:hover { background: #0d47a1; }
+
+/* Help dialog */
+.help-dialog {
+  width: 620px;
+  max-height: calc(100vh - 64px);
+}
+.help-body {
+  overflow-y: auto;
+  max-height: calc(100vh - 160px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-right: 4px;
+}
+.help-body section { display: flex; flex-direction: column; gap: 6px; }
+.help-body h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 4px;
+}
+.help-body p { margin: 0; font-size: 13px; color: #444; line-height: 1.55; }
+.help-body kbd {
+  display: inline-block;
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 0 5px;
+  font-family: inherit;
+  font-size: 12px;
+  color: #333;
+}
+.help-body code {
+  background: #f0f0f0;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.help-table {
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #444;
+}
+.help-table td { padding: 3px 8px 3px 0; vertical-align: top; }
+.help-table td:first-child { white-space: nowrap; }
+.swatch {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.swatch.warn { background: #fff8e1; border: 1px solid #ffe082; }
+.swatch.danger { background: #ffebee; border: 1px solid #ef9a9a; }
 </style>
