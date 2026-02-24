@@ -11,6 +11,7 @@ node_modules
 .DS_Store
 dist
 dist-ssr
+# docs/ is intentionally tracked (GitHub Pages build output)
 coverage
 *.local
 

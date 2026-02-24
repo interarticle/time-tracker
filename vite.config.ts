@@ -26,6 +26,9 @@ export default defineConfig({
     __COMMIT__: JSON.stringify(commitHash),
     __BUILD_TIME__: JSON.stringify(buildTime),
   },
+  build: {
+    outDir: 'docs',
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
