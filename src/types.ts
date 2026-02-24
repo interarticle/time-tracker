@@ -62,7 +62,7 @@ export interface TimeTracker {
   now: import('vue').Ref<number>
 
   // Notifications
-  sendTestNotification: () => void
+  sendTestNotification: () => Promise<void>
 
   // Picture-in-Picture
   openPip: () => Promise<void>

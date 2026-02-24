@@ -320,6 +320,18 @@ export function useTimeTracker(): TimeTracker {
     return ms / limitMs >= 0.8 && (limitMs - ms) <= 10 * 60 * 1000
   }
 
+  function isSecureOrigin(): boolean {
+    return location.protocol === 'https:'
+  }
+
+  function notify(title: string, body: string): void {
+    if (isSecureOrigin() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification(title, { body })
+    } else {
+      alert(`${title}\n${body}`)
+    }
+  }
+
   function checkNotifications() {
     if (!isToday.value) return
     for (const id of dayState.value.runningTimerIds) {
@@ -333,10 +345,10 @@ export function useTimeTracker(): TimeTracker {
 
       if (ms >= limit && !state.exceeded) {
         state.exceeded = true
-        alert(`\u26A0\uFE0F ${node.name} — time limit exceeded!\n${formatMs(ms)} / ${formatMs(limit)}`)
+        notify(`\u26A0\uFE0F ${node.name} — time limit exceeded!`, `${formatMs(ms)} / ${formatMs(limit)}`)
       } else if (isInWarningZone(ms, limit) && !state.warning) {
         state.warning = true
-        alert(`\u23F0 ${node.name} — approaching limit\n${formatMs(ms)} / ${formatMs(limit)}`)
+        notify(`\u23F0 ${node.name} — approaching limit`, `${formatMs(ms)} / ${formatMs(limit)}`)
       }
     }
   }
@@ -357,8 +369,18 @@ export function useTimeTracker(): TimeTracker {
     if (!isInWarningZone(ms, limit)) state.warning = false
   }
 
-  function sendTestNotification(): void {
-    alert('\u2705 Time Tracker — notifications working!\nYou will be alerted when timers approach or exceed their limits.')
+  async function sendTestNotification(): Promise<void> {
+    if (isSecureOrigin() && typeof Notification !== 'undefined') {
+      if (Notification.permission !== 'granted') {
+        const perm = await Notification.requestPermission()
+        if (perm !== 'granted') return
+      }
+      new Notification('\u2705 Time Tracker — notifications working!', {
+        body: 'You will be notified when timers approach or exceed their limits.',
+      })
+    } else {
+      alert('\u2705 Time Tracker — notifications working!\nYou will be alerted when timers approach or exceed their limits.')
+    }
   }
 
   // --- Tick interval for live updates ---
