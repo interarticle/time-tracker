@@ -3,6 +3,7 @@ import { inject, ref, computed } from 'vue'
 import { TimeTrackerKey } from '@/types'
 import type { TaskNode } from '@/types'
 import { formatMs, parseTimeInput } from '@/utils/format'
+import PieChart from './PieChart.vue'
 
 const props = defineProps<{ node: TaskNode; depth: number }>()
 const tracker = inject(TimeTrackerKey)!
@@ -153,10 +154,16 @@ function onNameMounted(el: HTMLInputElement) {
               @keydown.escape="editingLimit = false"
               @vue:mounted="($event: any) => $event.el.focus()"
             />
-            <span v-else-if="node.timeLimitMs !== null" class="limit-text" @click="startEditLimit">/{{ formatMs(node.timeLimitMs) }}</span>
-            <span v-else class="limit-set" @click="startEditLimit"></span>
+            <template v-else>
+              <PieChart v-if="limitRatio !== null" :ratio="limitRatio" />
+              <span v-if="node.timeLimitMs !== null" class="limit-text" @click="startEditLimit">/{{ formatMs(node.timeLimitMs) }}</span>
+              <span v-else class="limit-set" @click="startEditLimit"></span>
+            </template>
           </template>
-          <span v-else-if="subtreeLimitMs !== null" class="limit-text">/{{ formatMs(subtreeLimitMs) }}</span>
+          <template v-else-if="subtreeLimitMs !== null">
+            <PieChart v-if="limitRatio !== null" :ratio="limitRatio" />
+            <span class="limit-text">/{{ formatMs(subtreeLimitMs) }}</span>
+          </template>
         </span>
         <span v-if="limitPct !== null" class="pct-cell limit-pct">{{ limitPct }}%</span>
         <!-- Reverse indent: shallower = wider gap, deeper = narrower (flush with controls) -->
@@ -272,9 +279,12 @@ ul { margin: 0; padding: 0; }
   text-align: right;
 }
 .limit-cell {
-  width: 76px;
+  width: 92px;
   flex-shrink: 0;
-  text-align: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
   margin-left: 2px;
 }
 .time-text, .limit-text {

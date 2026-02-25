@@ -433,6 +433,23 @@ export function useTimeTracker(): TimeTracker {
   // --- Picture-in-Picture ---
   let pipWin: Window | null = null
 
+  function pieSvgHtml(ratio: number, size = 14): string {
+    const r = size / 2 - 1, cx = size / 2, cy = size / 2
+    function arcPath(frac: number): string {
+      const a = frac * 2 * Math.PI
+      const x = (cx + r * Math.sin(a)).toFixed(3)
+      const y = (cy - r * Math.cos(a)).toFixed(3)
+      return `M${cx},${cy} L${cx},${cy - r} A${r},${r} 0 ${frac > 0.5 ? 1 : 0},1 ${x},${y}Z`
+    }
+    const main = Math.min(ratio, 1), over = ratio - 1
+    let inner = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#ddd"/>`
+    if (main >= 1) inner += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#4a90d9"/>`
+    else if (main > 0) inner += `<path d="${arcPath(main)}" fill="#4a90d9"/>`
+    if (over >= 1) inner += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#e53935"/>`
+    else if (over > 0) inner += `<path d="${arcPath(over)}" fill="#e53935"/>`
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink:0">${inner}</svg>`
+  }
+
   function buildPipContent(win: Window) {
     const doc = win.document
     const style = doc.createElement('style')
@@ -445,6 +462,7 @@ export function useTimeTracker(): TimeTracker {
       .pip-task.is-exceeded { background: #ffebee; animation: pd 1s ease-in-out infinite; }
       .pip-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .pip-time { font-family: monospace; font-size: 13px; color: #333; flex-shrink: 0; }
+      .pip-pie { flex-shrink: 0; display: flex; align-items: center; }
       .pip-limit { font-family: monospace; font-size: 12px; color: #999; flex-shrink: 0; }
       #pip-stop { background: #c62828; color: #fff; border: none; border-radius: 4px; padding: 6px; cursor: pointer; font-size: 12px; font-weight: 500; width: 100%; flex-shrink: 0; }
       #pip-stop:hover { background: #b71c1c; }
@@ -494,14 +512,16 @@ export function useTimeTracker(): TimeTracker {
         row.dataset.id = id
         const nameEl = doc.createElement('span'); nameEl.className = 'pip-name'
         const timeEl = doc.createElement('span'); timeEl.className = 'pip-time'
+        const pieEl = doc.createElement('span'); pieEl.className = 'pip-pie'
         const limitEl = doc.createElement('span'); limitEl.className = 'pip-limit'
-        row.appendChild(nameEl); row.appendChild(timeEl); row.appendChild(limitEl)
+        row.appendChild(nameEl); row.appendChild(timeEl); row.appendChild(pieEl); row.appendChild(limitEl)
         tasksEl.appendChild(row)
       }
 
       row.className = cls;
       (row.querySelector('.pip-name') as HTMLElement).textContent = node.name;
       (row.querySelector('.pip-time') as HTMLElement).textContent = formatMs(ms);
+      (row.querySelector('.pip-pie') as HTMLElement).innerHTML = limit !== null && limit > 0 ? pieSvgHtml(ms / limit) : '';
       (row.querySelector('.pip-limit') as HTMLElement).textContent = limit !== null ? '/' + formatMs(limit) : ''
     }
   }
