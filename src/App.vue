@@ -70,6 +70,12 @@ function importData() {
         <button class="icon-btn" @click="tracker.sendTestNotification()" title="Test notifications">&#x1F514;</button>
         <button
           v-if="tracker.isToday.value && tracker.dayState.value.runningTimerIds.length > 0"
+          class="icon-btn"
+          @click="tracker.openPip()"
+          title="Open Picture-in-Picture"
+        >PiP</button>
+        <button
+          v-if="tracker.isToday.value && tracker.dayState.value.runningTimerIds.length > 0"
           class="stop-all-btn"
           @click="tracker.stopAll()"
         >

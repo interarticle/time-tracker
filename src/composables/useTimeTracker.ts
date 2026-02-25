@@ -475,7 +475,7 @@ export function useTimeTracker(): TimeTracker {
     const stopBtn = doc.createElement('button')
     stopBtn.id = 'pip-stop'
     stopBtn.textContent = 'Stop All'
-    stopBtn.addEventListener('click', () => stopAll())
+    stopBtn.addEventListener('click', () => { stopAll(); window.focus() })
     doc.body.appendChild(tasks)
     doc.body.appendChild(stopBtn)
   }
