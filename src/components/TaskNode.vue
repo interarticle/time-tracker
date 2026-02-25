@@ -164,9 +164,9 @@ function onNameMounted(el: HTMLInputElement) {
         <!-- Fixed-width button areas so controls never shift -->
         <span class="timer-btns">
           <template v-if="isLeaf && tracker.isToday.value">
-            <button v-if="!running" class="btn btn-switch" @click="tracker.switchTimer(node.id)" title="Switch"></button>
+            <button v-if="!running" class="btn btn-switch" @click="tracker.openPip().then(() => tracker.switchTimer(node.id))" title="Switch"></button>
             <button v-if="running" class="btn btn-stop" @click="tracker.stopTimer(node.id)" title="Stop"></button>
-            <button v-if="!running" class="btn btn-share" @click="tracker.shareTimer(node.id)" title="Share"></button>
+            <button v-if="!running" class="btn btn-share" @click="tracker.openPip().then(() => tracker.shareTimer(node.id))" title="Share"></button>
           </template>
         </span>
         <span class="struct-btns">

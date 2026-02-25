@@ -529,21 +529,10 @@ export function useTimeTracker(): TimeTracker {
     if (len === 0) closePip()
   })
 
-  // Open PiP when switching away from the tab (Meet-style), close when returning
-  function onVisibilityChange() {
-    if (document.visibilityState === 'hidden') {
-      if (dayState.value.runningTimerIds.length > 0) openPip().catch(() => {})
-    } else {
-      closePip()
-    }
-  }
-  document.addEventListener('visibilitychange', onVisibilityChange)
-
   onUnmounted(() => {
     clearInterval(tickInterval)
     clearInterval(persistInterval)
     clearInterval(midnightInterval)
-    document.removeEventListener('visibilitychange', onVisibilityChange)
     closePip()
   })
 
