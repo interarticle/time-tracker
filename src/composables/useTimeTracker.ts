@@ -627,11 +627,17 @@ export function useTimeTracker(): TimeTracker {
     }
   }
 
-  async function openPip(): Promise<void> {
+  async function openPip(forceReopen = false): Promise<void> {
     if (!('documentPictureInPicture' in window)) return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dPiP = (window as any).documentPictureInPicture
-    // Always close any existing PiP and open fresh
+    // If a PiP window already exists and we're not forcing a reopen, just update its content
+    if (dPiP.window && !forceReopen) {
+      pipWin = dPiP.window
+      updatePipContent()
+      return
+    }
+    // Force-reopen: close existing first, then open fresh
     if (dPiP.window) {
       try { (dPiP.window as Window).close() } catch {}
     }

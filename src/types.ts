@@ -65,7 +65,7 @@ export interface TimeTracker {
   sendTestNotification: () => Promise<void>
 
   // Picture-in-Picture
-  openPip: () => Promise<void>
+  openPip: (forceReopen?: boolean) => Promise<void>
 
   // Indent / Dedent
   focusNodeId: import('vue').Ref<string | null>

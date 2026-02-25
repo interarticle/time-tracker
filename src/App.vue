@@ -71,7 +71,7 @@ function importData() {
         <button
           v-if="tracker.isToday.value && tracker.dayState.value.runningTimerIds.length > 0"
           class="icon-btn"
-          @click="tracker.openPip()"
+          @click="tracker.openPip(true)"
           title="Open Picture-in-Picture"
         >PiP</button>
         <button
