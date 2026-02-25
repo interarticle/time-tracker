@@ -163,6 +163,99 @@ export function useTimeTracker(): TimeTracker {
     }
   }
 
+  // --- Focus request (set after indent/dedent so the node re-enters edit mode) ---
+  const focusNodeId = ref<string | null>(null)
+
+  // --- Indent / Dedent helpers ---
+  type FlatEntry = { node: TaskNode; depth: number }
+
+  function getFlatList(): FlatEntry[] {
+    const result: FlatEntry[] = []
+    function walk(nodes: TaskNode[], depth: number) {
+      for (const node of nodes) {
+        result.push({ node, depth })
+        walk(node.children, depth + 1)
+      }
+    }
+    walk(tree.value.roots, 0)
+    return result
+  }
+
+  /** Returns the ancestor path [root, …, node] for the given id, or null. */
+  function getNodePath(nodeId: string): TaskNode[] | null {
+    function find(nodes: TaskNode[], id: string, path: TaskNode[]): TaskNode[] | null {
+      for (const node of nodes) {
+        const next = [...path, node]
+        if (node.id === id) return next
+        const found = find(node.children, id, next)
+        if (found) return found
+      }
+      return null
+    }
+    return find(tree.value.roots, nodeId, [])
+  }
+
+  /** Remove the node from wherever it lives and return it. */
+  function detachNode(nodeId: string): TaskNode | null {
+    const { parent, index } = findParent(tree.value.roots, nodeId)
+    if (parent) return parent.children.splice(index, 1)[0] ?? null
+    const rootIdx = tree.value.roots.findIndex((r) => r.id === nodeId)
+    if (rootIdx !== -1) return tree.value.roots.splice(rootIdx, 1)[0] ?? null
+    return null
+  }
+
+  function indentTask(nodeId: string): string | null {
+    const flat = getFlatList()
+    const idx = flat.findIndex((e) => e.node.id === nodeId)
+    if (idx <= 0) return 'No item above — cannot indent'
+    const { depth: currentDepth } = flat[idx]!
+    const { node: aboveNode, depth: aboveDepth } = flat[idx - 1]!
+
+    if (aboveDepth > currentDepth) {
+      // Case 1: item above is deeper — slot current one level deeper into that hierarchy
+      const path = getNodePath(aboveNode.id)
+      if (!path || path.length <= currentDepth) return 'Cannot indent'
+      const targetParent = path[currentDepth]!
+      const removed = detachNode(nodeId)
+      if (!removed) return 'Cannot indent'
+      targetParent.children.push(removed)
+      persistTree()
+      focusNodeId.value = nodeId
+      return null
+    } else if (aboveDepth === currentDepth) {
+      // Case 2: same level — only if above has no accumulated time and no limit
+      if (getSubtreeMs(aboveNode) > 0) return 'Cannot indent: the item above has accumulated time'
+      if (getSubtreeLimitMs(aboveNode) !== null) return 'Cannot indent: the item above has a time limit set'
+      const removed = detachNode(nodeId)
+      if (!removed) return 'Cannot indent'
+      aboveNode.children.push(removed)
+      persistTree()
+      focusNodeId.value = nodeId
+      return null
+    } else {
+      return 'Cannot indent: the item above is at a higher level'
+    }
+  }
+
+  function dedentTask(nodeId: string): string | null {
+    const flat = getFlatList()
+    const entry = flat.find((e) => e.node.id === nodeId)
+    if (!entry || entry.depth === 0) return 'Already at top level — cannot dedent'
+    const { parent: currentParent, index: idxInParent } = findParent(tree.value.roots, nodeId)
+    if (!currentParent) return 'Already at top level — cannot dedent'
+    const { parent: grandParent, index: parentIdx } = findParent(tree.value.roots, currentParent.id)
+    const removed = currentParent.children.splice(idxInParent, 1)[0]!
+    if (grandParent) {
+      grandParent.children.splice(parentIdx + 1, 0, removed)
+    } else {
+      const rootIdx = tree.value.roots.findIndex((r) => r.id === currentParent.id)
+      tree.value.roots.splice(rootIdx + 1, 0, removed)
+    }
+    persistTree()
+    focusNodeId.value = nodeId
+    return null
+  }
+
   // --- Day timer state ---
   const dayState = ref<DayTimerState>(loadDayState(currentDateKey.value))
 
@@ -598,5 +691,8 @@ export function useTimeTracker(): TimeTracker {
     now,
     sendTestNotification,
     openPip,
+    focusNodeId,
+    indentTask,
+    dedentTask,
   }
 }

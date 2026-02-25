@@ -66,6 +66,11 @@ export interface TimeTracker {
 
   // Picture-in-Picture
   openPip: () => Promise<void>
+
+  // Indent / Dedent
+  focusNodeId: import('vue').Ref<string | null>
+  indentTask: (nodeId: string) => string | null
+  dedentTask: (nodeId: string) => string | null
 }
 
 export const TimeTrackerKey: InjectionKey<TimeTracker> = Symbol('TimeTracker')

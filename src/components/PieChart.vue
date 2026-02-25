@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const props = defineProps<{ ratio: number }>()
+defineProps<{ ratio: number }>()
 
 function arc(frac: number): string {
   const a = frac * 2 * Math.PI

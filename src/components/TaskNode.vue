@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, ref, computed } from 'vue'
+import { inject, ref, computed, watch, nextTick } from 'vue'
 import { TimeTrackerKey } from '@/types'
 import type { TaskNode } from '@/types'
 import { formatMs, parseTimeInput } from '@/utils/format'
@@ -52,6 +52,7 @@ const rowClasses = computed(() => {
 const editingName = ref(false)
 const nameInput = ref('')
 function startEditName() {
+  if (running.value) return
   editingName.value = true
   nameInput.value = props.node.name
 }
@@ -59,6 +60,54 @@ function commitName() {
   tracker.renameTask(props.node.id, nameInput.value)
   editingName.value = false
 }
+
+// Enter: save name and create a sibling below
+function commitAndAddSibling() {
+  if (running.value) { commitName(); return }
+  commitName()
+  tracker.addSibling(props.node.id)
+}
+
+// Tab / Shift+Tab: indent or dedent
+function handleTabKey(event: KeyboardEvent) {
+  if (running.value) return
+  // Save whatever is in the name box first
+  tracker.renameTask(props.node.id, nameInput.value)
+  const warning = event.shiftKey
+    ? tracker.dedentTask(props.node.id)
+    : tracker.indentTask(props.node.id)
+  if (warning) alert(warning)
+}
+
+// Delete with confirmation if the node has data worth preserving
+function handleDelete() {
+  const hasTime = tracker.getSubtreeMs(props.node) > 0
+  const hasLimit = tracker.getSubtreeLimitMs(props.node) !== null
+  const hasChildren = props.node.children.length > 0
+  if (hasTime || hasLimit || hasChildren) {
+    const reasons = [
+      hasTime && 'accumulated time',
+      hasLimit && 'a time limit',
+      hasChildren && 'subtasks',
+    ].filter(Boolean).join(', ')
+    if (!confirm(`"${props.node.name || 'Unnamed'}" has ${reasons}. Delete anyway?`)) return
+  }
+  tracker.deleteTask(props.node.id)
+}
+
+// Re-focus this node's name input after an indent/dedent operation.
+// immediate:true ensures it fires on remount (when the node moves in the tree).
+watch(
+  () => tracker.focusNodeId.value,
+  (id) => {
+    if (id !== props.node.id) return
+    tracker.focusNodeId.value = null
+    nameInput.value = props.node.name
+    editingName.value = true
+    // onNameMounted will fire for the freshly-mounted input and focus+select it
+  },
+  { immediate: true },
+)
 
 // Time editing (only for stopped leaves)
 const editingTime = ref(false)
@@ -96,8 +145,14 @@ function commitLimit() {
   editingLimit.value = false
 }
 
-function onNameMounted(el: HTMLInputElement) {
-  if (!props.node.name) el.focus()
+// Always focus (and select existing text) when the name input is freshly mounted.
+// Function refs fire on every re-render, so track the last element to skip no-op calls.
+let lastNameInputEl: HTMLInputElement | null = null
+function onNameMounted(el: HTMLInputElement | null) {
+  if (!el) { lastNameInputEl = null; return }
+  if (el === lastNameInputEl) return  // same element, just a re-render — skip
+  lastNameInputEl = el
+  nextTick(() => { el.focus(); el.select() })
 }
 </script>
 
@@ -110,14 +165,14 @@ function onNameMounted(el: HTMLInputElement) {
         <span class="node-icon" aria-hidden="true">{{ isLeaf ? '\u2022' : '\u25BE' }}</span>
         <input
           v-if="editingName || !node.name"
-          :ref="(el) => { if (el) onNameMounted(el as HTMLInputElement) }"
+          :ref="(el) => onNameMounted(el as HTMLInputElement | null)"
           v-model="nameInput"
           class="name-input"
           placeholder="Task name…"
           @blur="commitName"
-          @keydown.enter="($event.target as HTMLInputElement).blur()"
-          @keydown.escape="editingName = false"
-          @vue:mounted="() => { nameInput = node.name }"
+          @keydown.enter.prevent="commitAndAddSibling"
+          @keydown.escape.prevent="commitName"
+          @keydown.tab.prevent="handleTabKey($event)"
         />
         <span v-else class="name-text" @click="startEditName">{{ node.name }}</span>
       </span>
@@ -179,7 +234,7 @@ function onNameMounted(el: HTMLInputElement) {
         <span class="struct-btns">
           <button class="btn btn-struct btn-add-child" @click="tracker.addChild(node.id)" title="Add child"></button>
           <button class="btn btn-struct btn-add-sibling" @click="tracker.addSibling(node.id)" title="Add sibling"></button>
-          <button class="btn btn-struct btn-delete" @click="tracker.deleteTask(node.id)" title="Delete"></button>
+          <button class="btn btn-struct btn-delete" @click="handleDelete" title="Delete"></button>
         </span>
       </span>
     </div>
@@ -252,6 +307,9 @@ ul { margin: 0; padding: 0; }
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.is-running .name-text {
+  cursor: default;
 }
 .name-input {
   flex: 1;
