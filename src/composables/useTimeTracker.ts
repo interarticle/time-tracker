@@ -433,6 +433,14 @@ export function useTimeTracker(): TimeTracker {
   // --- Picture-in-Picture ---
   let pipWin: Window | null = null
 
+  // Use the canonical 'leave' event to detect PiP window close
+  if ('documentPictureInPicture' in window) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).documentPictureInPicture.addEventListener('leave', () => {
+      pipWin = null
+    })
+  }
+
   function pieSvgHtml(ratio: number, size = 14): string {
     const r = size / 2 - 1, cx = size / 2, cy = size / 2
     function arcPath(frac: number): string {
@@ -528,14 +536,19 @@ export function useTimeTracker(): TimeTracker {
 
   async function openPip(): Promise<void> {
     if (!('documentPictureInPicture' in window)) return
-    if (pipWin && !pipWin.closed) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dPiP = (window as any).documentPictureInPicture
+    // Always close any existing PiP and open fresh
+    if (dPiP.window) {
+      try { (dPiP.window as Window).close() } catch {}
+    }
+    pipWin = null
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      pipWin = await (window as any).documentPictureInPicture.requestWindow({ width: 300, height: 180, disallowReturnToOpener: true })
+      pipWin = await dPiP.requestWindow({ width: 300, height: 180 })
       buildPipContent(pipWin!)
       updatePipContent()
-      pipWin!.addEventListener('pagehide', () => { pipWin = null })
-    } catch {
+    } catch (e) {
+      console.error('[pip] requestWindow failed:', e)
       pipWin = null
     }
   }
