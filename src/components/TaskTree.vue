@@ -38,9 +38,8 @@ function formatRemaining(ms: number): string {
 const effectiveEndMinutes = computed(() => {
   const start = planning?.startOfDayMinutes.value
   if (start === null || start === undefined) return null
-  const committedMs = planning?.committedTotalMs.value ?? 0
   const plannedLimitsMs = tracker.getTotalDayLimitMs() ?? 0
-  return Math.round(start + (committedMs + plannedLimitsMs) / 60000)
+  return Math.round(start + plannedLimitsMs / 60000)
 })
 </script>
 
