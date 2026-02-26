@@ -55,7 +55,11 @@ export function loadPlanningSettings(): PlanningSettings {
   } catch {
     // ignore
   }
-  return { enabled: false, dailyLimitMs: 8 * 60 * 60 * 1000 }
+  return { enabled: false }
+}
+
+export function hasPlanningDay(dateKey: string): boolean {
+  return localStorage.getItem(PLAN_PREFIX + dateKey) !== null
 }
 
 export function savePlanningSettings(s: PlanningSettings): void {

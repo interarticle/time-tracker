@@ -81,25 +81,29 @@ const showPlanningDialog = ref(false)
 const planningLimitInput = ref('')
 
 function openPlanningDialog() {
-  // Pre-fill with current limit in H:MM format
   const ms = planning.dailyLimitMs.value
-  const totalMinutes = Math.floor(ms / 60000)
-  const h = Math.floor(totalMinutes / 60)
-  const m = totalMinutes % 60
-  planningLimitInput.value = `${h}:${String(m).padStart(2, '0')}`
+  if (ms !== undefined) {
+    const totalMinutes = Math.floor(ms / 60000)
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    planningLimitInput.value = `${h}:${String(m).padStart(2, '0')}`
+  } else {
+    planningLimitInput.value = ''
+  }
   showPlanningDialog.value = true
 }
 
 function savePlanningLimit() {
   const ms = parseHoursMinutes(planningLimitInput.value)
   if (ms !== null && ms > 0) {
-    planning.setPlanningLimit(ms)
+    planning.setDailyLimit(ms)
+    planning.setPlanningEnabled(true)
   }
   showPlanningDialog.value = false
 }
 
 function disablePlanningAndClose() {
-  planning.disablePlanning()
+  planning.setPlanningEnabled(false)
   showPlanningDialog.value = false
 }
 </script>
@@ -114,7 +118,11 @@ function disablePlanningAndClose() {
         <span v-if="totalDayLimitMs !== null" class="total-limit">/{{ formatMs(totalDayLimitMs) }}</span>
       </div>
       <div class="header-actions">
-        <button class="icon-btn sigma-btn" @click="openPlanningDialog">Σ</button>
+        <button
+          class="icon-btn sigma-btn"
+          :class="{ 'sigma-active': planning.planningEnabled.value }"
+          @click="openPlanningDialog"
+        >Σ</button>
         <button class="icon-btn" @click="showHelpDialog = true" title="Help">?</button>
         <button class="icon-btn" @click="openDataDialog" title="Import / Export">&#x1F4BE;</button>
         <button class="icon-btn" @click="tracker.sendTestNotification()" title="Test notifications">&#x1F514;</button>
@@ -157,7 +165,7 @@ function disablePlanningAndClose() {
         </div>
         <div class="planning-form">
           <label class="planning-label">
-            Daily limit:
+            Next daily limit:
             <input
               v-model="planningLimitInput"
               class="planning-input"
@@ -357,6 +365,11 @@ body {
 .sigma-btn {
   font-weight: 600;
   color: #555;
+}
+.sigma-active {
+  background: #e8f0fe;
+  border-color: #4a90d9;
+  color: #1a56a0;
 }
 .stop-all-btn {
   background: #c62828;

@@ -6,6 +6,7 @@ import {
   savePlanningSettings,
   loadPlanningDay,
   savePlanningDay,
+  hasPlanningDay,
 } from '@/utils/storage'
 
 let idCounter = Date.now() + 1_000_000
@@ -39,34 +40,37 @@ export function usePlanning(currentDateKey: Ref<string>, tracker: TimeTracker): 
   // --- Settings (global, persists across days) ---
   const settings = loadPlanningSettings()
   const planningEnabled = ref(settings.enabled)
-  const dailyLimitMs = ref(settings.dailyLimitMs)
+  // Seed for new days only — updated whenever any day's limit is set
+  const lastDailyLimitMs = ref<number | undefined>(settings.lastDailyLimitMs)
 
   function persistSettings() {
-    savePlanningSettings({ enabled: planningEnabled.value, dailyLimitMs: dailyLimitMs.value })
+    savePlanningSettings({ enabled: planningEnabled.value, lastDailyLimitMs: lastDailyLimitMs.value })
   }
 
-  function setPlanningLimit(ms: number) {
-    dailyLimitMs.value = ms
-    planningEnabled.value = true
-    persistSettings()
-  }
-
-  function disablePlanning() {
-    planningEnabled.value = false
+  function setPlanningEnabled(enabled: boolean) {
+    planningEnabled.value = enabled
     persistSettings()
   }
 
   // --- Per-day data ---
+  function seedDailyLimit(dateKey: string, dayData: ReturnType<typeof loadPlanningDay>): number | undefined {
+    // Use stored value if present; for new days (no existing record) seed from last known
+    if (dayData.dailyLimitMs !== undefined) return dayData.dailyLimitMs
+    return hasPlanningDay(dateKey) ? undefined : lastDailyLimitMs.value
+  }
+
   const dayData = loadPlanningDay(currentDateKey.value)
   const committedTree = ref<CommittedTreeData>({ roots: dayData.roots })
   const startOfDayMinutes = ref<number | null>(dayData.startOfDayMinutes)
   const bufferLimitMs = ref<number | undefined>(dayData.bufferLimitMs)
+  const dailyLimitMs = ref<number | undefined>(seedDailyLimit(currentDateKey.value, dayData))
 
   function persistDay() {
     savePlanningDay(currentDateKey.value, {
       startOfDayMinutes: startOfDayMinutes.value,
       roots: committedTree.value.roots,
       bufferLimitMs: bufferLimitMs.value,
+      dailyLimitMs: dailyLimitMs.value,
     })
   }
 
@@ -75,7 +79,17 @@ export function usePlanning(currentDateKey: Ref<string>, tracker: TimeTracker): 
     committedTree.value = { roots: d.roots }
     startOfDayMinutes.value = d.startOfDayMinutes
     bufferLimitMs.value = d.bufferLimitMs
+    dailyLimitMs.value = seedDailyLimit(newKey, d)
   })
+
+  function setDailyLimit(ms: number | undefined) {
+    dailyLimitMs.value = ms
+    if (ms !== undefined) {
+      lastDailyLimitMs.value = ms
+      persistSettings()
+    }
+    persistDay()
+  }
 
   function setBufferLimit(ms: number | undefined) {
     bufferLimitMs.value = ms
@@ -256,7 +270,7 @@ export function usePlanning(currentDateKey: Ref<string>, tracker: TimeTracker): 
     committedTree.value.roots.reduce((sum, root) => sum + getCommittedSubtreeMs(root), 0),
   )
 
-  const timeAvailableMs = computed(() => Math.max(0, dailyLimitMs.value - committedTotalMs.value))
+  const timeAvailableMs = computed(() => Math.max(0, (dailyLimitMs.value ?? 0) - committedTotalMs.value))
 
   const endOfDayMinutes = computed(() => {
     if (startOfDayMinutes.value === null) return null
@@ -332,9 +346,9 @@ export function usePlanning(currentDateKey: Ref<string>, tracker: TimeTracker): 
 
   return {
     planningEnabled,
+    setPlanningEnabled,
     dailyLimitMs,
-    setPlanningLimit,
-    disablePlanning,
+    setDailyLimit,
     committedTree,
     startOfDayMinutes,
     setStartOfDay,

@@ -1,10 +1,44 @@
 <script setup lang="ts">
 import { inject, ref, computed } from 'vue'
 import { PlanningKey } from '@/types'
-import { formatMsHM, formatMinutes, parseClockHHMM } from '@/utils/format'
+import { formatMsHM, formatMinutes, parseClockHHMM, parseHoursMinutes } from '@/utils/format'
 
 const planning = inject(PlanningKey)!
 
+// --- Daily limit ---
+const editingLimit = ref(false)
+const limitInput = ref('')
+
+const limitDisplay = computed(() =>
+  planning.dailyLimitMs.value !== undefined
+    ? formatMsHM(planning.dailyLimitMs.value)
+    : '--:--',
+)
+
+function startEditLimit() {
+  editingLimit.value = true
+  const ms = planning.dailyLimitMs.value
+  if (ms !== undefined) {
+    const totalMinutes = Math.floor(ms / 60000)
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    limitInput.value = `${h}:${String(m).padStart(2, '0')}`
+  } else {
+    limitInput.value = ''
+  }
+}
+
+function commitLimit() {
+  if (limitInput.value.trim() === '') {
+    planning.setDailyLimit(undefined)
+  } else {
+    const ms = parseHoursMinutes(limitInput.value)
+    if (ms !== null && ms > 0) planning.setDailyLimit(ms)
+  }
+  editingLimit.value = false
+}
+
+// --- Start of day ---
 const editingStart = ref(false)
 const startInput = ref('')
 
@@ -41,12 +75,29 @@ function commitStart() {
 
 <template>
   <div class="planning-info-bar">
+    <!-- Daily limit -->
+    <span class="info-item">
+      <span class="info-label">Limit:</span>
+      <input
+        v-if="editingLimit"
+        v-model="limitInput"
+        class="info-input"
+        placeholder="H:MM"
+        @blur="commitLimit"
+        @keydown.enter="($event.target as HTMLInputElement).blur()"
+        @keydown.escape="editingLimit = false"
+        @vue:mounted="($event: any) => $event.el.focus()"
+      />
+      <span v-else class="info-value editable" @click="startEditLimit">{{ limitDisplay }}</span>
+    </span>
+    <span class="info-sep">│</span>
+    <!-- Start of day -->
     <span class="info-item">
       <span class="info-label">Start:</span>
       <input
         v-if="editingStart"
         v-model="startInput"
-        class="start-input"
+        class="info-input"
         placeholder="HH:MM"
         @blur="commitStart"
         @keydown.enter="($event.target as HTMLInputElement).blur()"
@@ -100,7 +151,7 @@ function commitStart() {
 .info-sep {
   color: #ddd;
 }
-.start-input {
+.info-input {
   width: 60px;
   font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
   font-size: 12px;

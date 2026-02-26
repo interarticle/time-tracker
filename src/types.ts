@@ -43,11 +43,12 @@ export interface PlanningDayData {
   startOfDayMinutes: number | null
   roots: CommittedNode[]
   bufferLimitMs?: number
+  dailyLimitMs?: number
 }
 
 export interface PlanningSettings {
   enabled: boolean
-  dailyLimitMs: number
+  lastDailyLimitMs?: number
 }
 
 export interface TimeTracker {
@@ -102,9 +103,10 @@ export const TimeTrackerKey: InjectionKey<TimeTracker> = Symbol('TimeTracker')
 export interface Planning {
   // Settings (global)
   planningEnabled: Ref<boolean>
-  dailyLimitMs: Ref<number>
-  setPlanningLimit: (ms: number) => void
-  disablePlanning: () => void
+  setPlanningEnabled: (enabled: boolean) => void
+  // Per-day limit
+  dailyLimitMs: Ref<number | undefined>
+  setDailyLimit: (ms: number | undefined) => void
   // Per-day committed tree
   committedTree: Ref<CommittedTreeData>
   startOfDayMinutes: Ref<number | null>
