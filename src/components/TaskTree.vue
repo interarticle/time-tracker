@@ -24,7 +24,7 @@ const showPlanningHeader = computed(
   () => !isCommitted.value && planning?.planningEnabled.value,
 )
 const availableMs = computed(() => planning?.timeAvailableMs.value ?? 0)
-const limitsMs = computed(() => tracker.getTotalDayLimitMs() ?? 0)
+const limitsMs = computed(() => (tracker.getTotalDayLimitMs() ?? 0) + (planning?.bufferLimitMs.value ?? 0))
 const remainingMs = computed(() => availableMs.value - limitsMs.value)
 const remainingColor = computed(() =>
   remainingMs.value > 0 ? '#2e7d32' : remainingMs.value < 0 ? '#c62828' : '#888',
@@ -39,8 +39,7 @@ function formatRemaining(ms: number): string {
 const effectiveEndMinutes = computed(() => {
   const start = planning?.startOfDayMinutes.value
   if (start === null || start === undefined) return null
-  const plannedLimitsMs = tracker.getTotalDayLimitMs() ?? 0
-  return Math.round(start + plannedLimitsMs / 60000)
+  return Math.round(start + limitsMs.value / 60000)
 })
 </script>
 

@@ -269,14 +269,15 @@ export function usePlanning(currentDateKey: Ref<string>, tracker: TimeTracker): 
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
 
-  const bufferAccumulatedMs = computed(() => {
+  // Effective end uses task limits + buffer limit
+  function computeBufferLive(): number {
     const start = startOfDayMinutes.value
     if (start === null) return 0
-    const limitMs = tracker.getTotalDayLimitMs()
-    if (!limitMs || limitMs <= 0) return 0
+    const totalLimitMs = (tracker.getTotalDayLimitMs() ?? 0) + (bufferLimitMs.value ?? 0)
+    if (totalLimitMs <= 0) return 0
 
-    const startMs = start * 60000           // ms from midnight
-    const effectiveEndMs = startMs + limitMs // ms from midnight
+    const startMs = start * 60000
+    const effectiveEndMs = startMs + totalLimitMs
     const nowMs = tracker.now.value
     const nowDateKey = dateKeyOf(nowMs)
     const otherPlannedMs = tracker.getTotalDayMs()
@@ -296,13 +297,29 @@ export function usePlanning(currentDateKey: Ref<string>, tracker: TimeTracker): 
     if (nowFromMidnight <= startMs) return 0
     if (nowFromMidnight >= effectiveEndMs) return effectiveEndMs - startMs - otherPlannedMs
     return nowFromMidnight - startMs - otherPlannedMs
-  })
+  }
+
+  // Freeze the value while any timer is running to avoid see-saw oscillation
+  const frozenBufferMs = ref(computeBufferLive())
+  watch(
+    () => tracker.dayState.value.runningTimerIds.length,
+    (len, prevLen) => {
+      if (len > 0 && !(prevLen ?? 0)) {
+        frozenBufferMs.value = computeBufferLive()
+      }
+    },
+  )
+  const bufferAccumulatedMs = computed(() =>
+    tracker.dayState.value.runningTimerIds.length > 0
+      ? frozenBufferMs.value
+      : computeBufferLive(),
+  )
 
   const bufferIsLive = computed(() => {
     const start = startOfDayMinutes.value
     if (start === null) return false
-    const limitMs = tracker.getTotalDayLimitMs()
-    if (!limitMs || limitMs <= 0) return false
+    const totalLimitMs = (tracker.getTotalDayLimitMs() ?? 0) + (bufferLimitMs.value ?? 0)
+    if (totalLimitMs <= 0) return false
     if (dateKeyOf(tracker.now.value) !== currentDateKey.value) return false
 
     const nowDate = new Date(tracker.now.value)
@@ -310,8 +327,7 @@ export function usePlanning(currentDateKey: Ref<string>, tracker: TimeTracker): 
       (nowDate.getHours() * 60 + nowDate.getMinutes()) * 60000 +
       nowDate.getSeconds() * 1000
     const startMs = start * 60000
-    const effectiveEndMs = startMs + limitMs
-    return nowFromMidnight > startMs && nowFromMidnight < effectiveEndMs
+    return nowFromMidnight > startMs && nowFromMidnight < startMs + totalLimitMs
   })
 
   return {
