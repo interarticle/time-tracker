@@ -1,17 +1,39 @@
 <script setup lang="ts">
 import { provide, computed, ref } from 'vue'
-import { TimeTrackerKey } from '@/types'
+import { TimeTrackerKey, PlanningKey } from '@/types'
 import { useTimeTracker } from '@/composables/useTimeTracker'
-import { formatMs } from '@/utils/format'
+import { usePlanning } from '@/composables/usePlanning'
+import { formatMs, parseHoursMinutes } from '@/utils/format'
 import DateNav from '@/components/DateNav.vue'
 import TaskTree from '@/components/TaskTree.vue'
+import CommittedSection from '@/components/CommittedSection.vue'
+import PlanningInfoBar from '@/components/PlanningInfoBar.vue'
+import CategoryBreakdown from '@/components/CategoryBreakdown.vue'
 
 const tracker = useTimeTracker()
+const planning = usePlanning(tracker.currentDateKey)
 const buildInfo = `${__COMMIT__} · built on ${__BUILD_TIME__}`
 provide(TimeTrackerKey, tracker)
+provide(PlanningKey, planning)
 
-const totalDayMs = computed(() => tracker.getTotalDayMs())
-const totalDayLimitMs = computed(() => tracker.getTotalDayLimitMs())
+// Header rollup
+const totalDayMs = computed(() => {
+  if (planning.planningEnabled.value) {
+    return tracker.getTotalDayMs() + planning.committedTotalMs.value
+  }
+  return tracker.getTotalDayMs()
+})
+const totalDayLimitMs = computed(() => {
+  if (planning.planningEnabled.value) {
+    const trackerLimit = tracker.getTotalDayLimitMs()
+    const committedTotal = planning.committedTotalMs.value
+    if (trackerLimit !== null || committedTotal > 0) {
+      return (trackerLimit ?? 0) + committedTotal
+    }
+    return null
+  }
+  return tracker.getTotalDayLimitMs()
+})
 
 // --- Help dialog ---
 const showHelpDialog = ref(false)
@@ -53,6 +75,33 @@ function importData() {
     importError.value = e instanceof Error ? e.message : 'Invalid JSON'
   }
 }
+
+// --- Planning dialog ---
+const showPlanningDialog = ref(false)
+const planningLimitInput = ref('')
+
+function openPlanningDialog() {
+  // Pre-fill with current limit in H:MM format
+  const ms = planning.dailyLimitMs.value
+  const totalMinutes = Math.floor(ms / 60000)
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
+  planningLimitInput.value = `${h}:${String(m).padStart(2, '0')}`
+  showPlanningDialog.value = true
+}
+
+function savePlanningLimit() {
+  const ms = parseHoursMinutes(planningLimitInput.value)
+  if (ms !== null && ms > 0) {
+    planning.setPlanningLimit(ms)
+  }
+  showPlanningDialog.value = false
+}
+
+function disablePlanningAndClose() {
+  planning.disablePlanning()
+  showPlanningDialog.value = false
+}
 </script>
 
 <template>
@@ -65,6 +114,7 @@ function importData() {
         <span v-if="totalDayLimitMs !== null" class="total-limit">/{{ formatMs(totalDayLimitMs) }}</span>
       </div>
       <div class="header-actions">
+        <button class="icon-btn sigma-btn" @click="openPlanningDialog">Σ</button>
         <button class="icon-btn" @click="showHelpDialog = true" title="Help">?</button>
         <button class="icon-btn" @click="openDataDialog" title="Import / Export">&#x1F4BE;</button>
         <button class="icon-btn" @click="tracker.sendTestNotification()" title="Test notifications">&#x1F514;</button>
@@ -84,10 +134,52 @@ function importData() {
       </div>
     </header>
     <main>
-      <TaskTree />
+      <template v-if="planning.planningEnabled.value">
+        <CommittedSection />
+        <PlanningInfoBar />
+        <TaskTree mode="planned" />
+        <CategoryBreakdown />
+      </template>
+      <template v-else>
+        <TaskTree />
+      </template>
     </main>
     <footer class="build-info">{{ buildInfo }}</footer>
   </div>
+
+  <!-- Planning dialog -->
+  <Teleport to="body">
+    <div v-if="showPlanningDialog" class="overlay" @click.self="showPlanningDialog = false">
+      <div class="dialog planning-dialog">
+        <div class="dialog-header">
+          <span class="dialog-title">Planning Mode</span>
+          <button class="dialog-close" @click="showPlanningDialog = false">&#x00D7;</button>
+        </div>
+        <div class="planning-form">
+          <label class="planning-label">
+            Daily limit:
+            <input
+              v-model="planningLimitInput"
+              class="planning-input"
+              placeholder="H:MM"
+              @keydown.enter="savePlanningLimit"
+              @vue:mounted="($event: any) => { $event.el.focus(); $event.el.select() }"
+            />
+          </label>
+          <span class="planning-hint">hours:minutes (e.g. 8:00)</span>
+        </div>
+        <div class="dialog-actions">
+          <button
+            v-if="planning.planningEnabled.value"
+            class="btn-disable-planning"
+            @click="disablePlanningAndClose"
+          >Disable planning</button>
+          <div style="flex:1"></div>
+          <button class="btn-save-planning" @click="savePlanningLimit">Save</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 
   <!-- Help dialog -->
   <Teleport to="body">
@@ -160,8 +252,13 @@ function importData() {
           </section>
 
           <section>
+            <h3>Planning mode</h3>
+            <p>Click <kbd>Σ</kbd> in the header to enable planning mode. Set a daily limit (total work hours). The <strong>Committed</strong> section holds fixed-duration obligations (meetings, etc.). The <strong>info bar</strong> shows start time, available time, and projected end. The <strong>By Category</strong> breakdown merges committed and planned items by root name.</p>
+          </section>
+
+          <section>
             <h3>Import / Export</h3>
-            <p>The <kbd>💾</kbd> button exports all data as a single JSON object keyed by localStorage key (<code>tt:tree:YYYY-MM-DD</code>, <code>tt:day:YYYY-MM-DD</code>, <code>tt:meta</code>). Paste edited JSON back and click <em>Import &amp; reload</em> to restore. Useful for backups or moving data between browsers.</p>
+            <p>The <kbd>💾</kbd> button exports all data as a single JSON object keyed by localStorage key (<code>tt:tree:YYYY-MM-DD</code>, <code>tt:day:YYYY-MM-DD</code>, <code>tt:meta</code>, <code>tt:planning</code>, <code>tt:plan:YYYY-MM-DD</code>). Paste edited JSON back and click <em>Import &amp; reload</em> to restore. Useful for backups or moving data between browsers.</p>
           </section>
 
         </div>
@@ -257,6 +354,10 @@ body {
 .icon-btn:hover {
   background: #f0f0f0;
 }
+.sigma-btn {
+  font-weight: 600;
+  color: #555;
+}
 .stop-all-btn {
   background: #c62828;
   color: white;
@@ -351,6 +452,7 @@ body {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  align-items: center;
 }
 .btn-copy, .btn-import {
   border: none;
@@ -371,6 +473,59 @@ body {
   color: #fff;
 }
 .btn-import:hover { background: #0d47a1; }
+
+/* Planning dialog */
+.planning-dialog {
+  width: 360px;
+}
+.planning-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.planning-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #333;
+}
+.planning-input {
+  width: 90px;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 14px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 4px 8px;
+  outline: none;
+}
+.planning-input:focus { border-color: #4a90d9; }
+.planning-hint {
+  font-size: 11px;
+  color: #aaa;
+}
+.btn-save-planning {
+  background: #1565c0;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 0.15s;
+}
+.btn-save-planning:hover { background: #0d47a1; }
+.btn-disable-planning {
+  background: none;
+  border: none;
+  color: #c62828;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  text-decoration: underline;
+}
+.btn-disable-planning:hover { color: #b71c1c; }
 
 /* Help dialog */
 .help-dialog {

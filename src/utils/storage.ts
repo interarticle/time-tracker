@@ -1,8 +1,10 @@
-import type { TaskTreeData, DayTimerState, MetaData } from '@/types'
+import type { TaskTreeData, DayTimerState, MetaData, PlanningSettings, PlanningDayData } from '@/types'
 
 const TREE_PREFIX = 'tt:tree:'
 const DAY_PREFIX = 'tt:day:'
 const META_KEY = 'tt:meta'
+const PLANNING_KEY = 'tt:planning'
+const PLAN_PREFIX = 'tt:plan:'
 
 export function loadTree(dateKey: string): TaskTreeData {
   try {
@@ -44,4 +46,32 @@ export function loadMeta(): MetaData {
 
 export function saveMeta(meta: MetaData): void {
   localStorage.setItem(META_KEY, JSON.stringify(meta))
+}
+
+export function loadPlanningSettings(): PlanningSettings {
+  try {
+    const raw = localStorage.getItem(PLANNING_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {
+    // ignore
+  }
+  return { enabled: false, dailyLimitMs: 8 * 60 * 60 * 1000 }
+}
+
+export function savePlanningSettings(s: PlanningSettings): void {
+  localStorage.setItem(PLANNING_KEY, JSON.stringify(s))
+}
+
+export function loadPlanningDay(dateKey: string): PlanningDayData {
+  try {
+    const raw = localStorage.getItem(PLAN_PREFIX + dateKey)
+    if (raw) return JSON.parse(raw)
+  } catch {
+    // ignore
+  }
+  return { startOfDayMinutes: null, roots: [] }
+}
+
+export function savePlanningDay(dateKey: string, data: PlanningDayData): void {
+  localStorage.setItem(PLAN_PREFIX + dateKey, JSON.stringify(data))
 }

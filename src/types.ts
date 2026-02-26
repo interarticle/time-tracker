@@ -1,4 +1,4 @@
-import type { InjectionKey } from 'vue'
+import type { InjectionKey, Ref, ComputedRef } from 'vue'
 
 export interface TaskNode {
   id: string
@@ -26,17 +26,38 @@ export interface MetaData {
   lastOpenDate: string
 }
 
+export interface CommittedNode {
+  id: string
+  name: string
+  children: CommittedNode[]
+  durationMs: number | null
+}
+
+export interface CommittedTreeData {
+  roots: CommittedNode[]
+}
+
+export interface PlanningDayData {
+  startOfDayMinutes: number | null
+  roots: CommittedNode[]
+}
+
+export interface PlanningSettings {
+  enabled: boolean
+  dailyLimitMs: number
+}
+
 export interface TimeTracker {
   // Date navigation
-  currentDateKey: import('vue').Ref<string>
-  isToday: import('vue').ComputedRef<boolean>
-  displayDate: import('vue').ComputedRef<string>
+  currentDateKey: Ref<string>
+  isToday: ComputedRef<boolean>
+  displayDate: ComputedRef<string>
   goToPrevDay: () => void
   goToNextDay: () => void
   goToToday: () => void
 
   // Task tree
-  tree: import('vue').Ref<TaskTreeData>
+  tree: Ref<TaskTreeData>
   addRoot: () => void
   addChild: (parentId: string) => void
   addSibling: (nodeId: string) => void
@@ -45,7 +66,7 @@ export interface TimeTracker {
   setTimeLimit: (nodeId: string, limitMs: number | null) => void
 
   // Timer state & actions
-  dayState: import('vue').Ref<DayTimerState>
+  dayState: Ref<DayTimerState>
   switchTimer: (id: string) => void
   stopTimer: (id: string) => void
   shareTimer: (id: string) => void
@@ -59,7 +80,7 @@ export interface TimeTracker {
   getTotalDayMs: () => number
   getTotalDayLimitMs: () => number | null
   isRunning: (id: string) => boolean
-  now: import('vue').Ref<number>
+  now: Ref<number>
 
   // Notifications
   sendTestNotification: () => Promise<void>
@@ -68,9 +89,39 @@ export interface TimeTracker {
   openPip: (forceReopen?: boolean) => Promise<void>
 
   // Indent / Dedent
-  focusNodeId: import('vue').Ref<string | null>
+  focusNodeId: Ref<string | null>
   indentTask: (nodeId: string) => string | null
   dedentTask: (nodeId: string) => string | null
 }
 
 export const TimeTrackerKey: InjectionKey<TimeTracker> = Symbol('TimeTracker')
+
+export interface Planning {
+  // Settings (global)
+  planningEnabled: Ref<boolean>
+  dailyLimitMs: Ref<number>
+  setPlanningLimit: (ms: number) => void
+  disablePlanning: () => void
+  // Per-day committed tree
+  committedTree: Ref<CommittedTreeData>
+  startOfDayMinutes: Ref<number | null>
+  setStartOfDay: (minutes: number | null) => void
+  // Committed tree CRUD
+  addCommittedRoot: () => void
+  addCommittedChild: (parentId: string) => void
+  addCommittedSibling: (nodeId: string) => void
+  renameCommitted: (nodeId: string, name: string) => void
+  deleteCommitted: (nodeId: string) => void
+  setCommittedDuration: (nodeId: string, ms: number | null) => void
+  // Indent/dedent
+  committedFocusNodeId: Ref<string | null>
+  indentCommitted: (nodeId: string) => string | null
+  dedentCommitted: (nodeId: string) => string | null
+  // Computeds
+  committedTotalMs: ComputedRef<number>
+  timeAvailableMs: ComputedRef<number>
+  endOfDayMinutes: ComputedRef<number | null>
+  getCommittedSubtreeMs: (node: CommittedNode) => number
+}
+
+export const PlanningKey: InjectionKey<Planning> = Symbol('Planning')

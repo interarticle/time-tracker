@@ -1,47 +1,71 @@
 <script setup lang="ts">
 import { inject, ref, computed, watch, nextTick } from 'vue'
-import { TimeTrackerKey } from '@/types'
-import type { TaskNode } from '@/types'
+import { TimeTrackerKey, PlanningKey } from '@/types'
+import type { TaskNode, CommittedNode } from '@/types'
 import { formatMs, parseTimeInput } from '@/utils/format'
 import PieChart from './PieChart.vue'
 
-const props = defineProps<{ node: TaskNode; depth: number }>()
-const tracker = inject(TimeTrackerKey)!
+type AnyNode = TaskNode | CommittedNode
 
+const props = defineProps<{ node: AnyNode; depth: number; mode?: 'planned' | 'committed' }>()
+const tracker = inject(TimeTrackerKey)!
+const planning = inject(PlanningKey, null)
+
+const isCommitted = computed(() => props.mode === 'committed')
 const isLeaf = computed(() => props.node.children.length === 0)
-const running = computed(() => tracker.isRunning(props.node.id))
-const displayMs = computed(() =>
-  isLeaf.value ? tracker.getDisplayMs(props.node.id) : tracker.getSubtreeMs(props.node),
-)
+
+const running = computed(() => !isCommitted.value && tracker.isRunning(props.node.id))
+
+const displayMs = computed(() => {
+  if (isCommitted.value) {
+    return planning!.getCommittedSubtreeMs(props.node as CommittedNode)
+  }
+  return isLeaf.value
+    ? tracker.getDisplayMs(props.node.id)
+    : tracker.getSubtreeMs(props.node as TaskNode)
+})
 const displayTime = computed(() => formatMs(displayMs.value))
-const subtreeLimitMs = computed(() => tracker.getSubtreeLimitMs(props.node))
+
+// timeLimitMs is only relevant in planned mode
+const timeLimitMs = computed(() => {
+  if (isCommitted.value) return null
+  return (props.node as TaskNode).timeLimitMs
+})
+const subtreeLimitMs = computed(() => {
+  if (isCommitted.value) return null
+  return tracker.getSubtreeLimitMs(props.node as TaskNode)
+})
 
 const limitRatio = computed(() => {
   if (subtreeLimitMs.value === null || subtreeLimitMs.value <= 0) return null
   return displayMs.value / subtreeLimitMs.value
 })
 
-// Percentage of day totals (root nodes only)
+// Percentage of day totals (root nodes only, planned mode only)
 const timePct = computed(() => {
-  if (props.depth !== 0) return null
+  if (isCommitted.value || props.depth !== 0) return null
   const total = tracker.getTotalDayMs()
   if (total <= 0) return null
   return Math.round((displayMs.value / total) * 100)
 })
 const limitPct = computed(() => {
-  if (props.depth !== 0) return null
+  if (isCommitted.value || props.depth !== 0) return null
   const totalLimit = tracker.getTotalDayLimitMs()
   if (totalLimit === null || totalLimit <= 0 || subtreeLimitMs.value === null) return null
   return Math.round((subtreeLimitMs.value / totalLimit) * 100)
 })
 
 const rowClasses = computed(() => {
+  if (isCommitted.value) return {}
   const c: Record<string, boolean> = {}
   if (running.value) c['is-running'] = true
   if (limitRatio.value !== null) {
     if (limitRatio.value >= 1) {
       c[running.value ? 'limit-exceeded-running' : 'limit-exceeded'] = true
-    } else if (limitRatio.value >= 0.8 && (subtreeLimitMs.value! - displayMs.value) <= 10 * 60 * 1000) {
+    } else if (
+      limitRatio.value >= 0.8 &&
+      (subtreeLimitMs.value! - displayMs.value) <= 10 * 60 * 1000
+    ) {
       c[running.value ? 'limit-approaching-running' : 'limit-approaching'] = true
     }
   }
@@ -52,88 +76,168 @@ const rowClasses = computed(() => {
 const editingName = ref(false)
 const nameInput = ref('')
 function startEditName() {
-  if (running.value) return
+  if (!isCommitted.value && running.value) return
   editingName.value = true
   nameInput.value = props.node.name
 }
 function commitName() {
-  tracker.renameTask(props.node.id, nameInput.value)
+  if (isCommitted.value) {
+    planning!.renameCommitted(props.node.id, nameInput.value)
+  } else {
+    tracker.renameTask(props.node.id, nameInput.value)
+  }
   editingName.value = false
 }
 
 // Enter: save name and create a sibling below
 function commitAndAddSibling() {
-  if (running.value) { commitName(); return }
+  if (!isCommitted.value && running.value) { commitName(); return }
   commitName()
-  tracker.addSibling(props.node.id)
+  if (isCommitted.value) {
+    planning!.addCommittedSibling(props.node.id)
+  } else {
+    tracker.addSibling(props.node.id)
+  }
+}
+
+// Escape: save name; auto-delete if empty with no data
+function handleEscape() {
+  commitName()
+  // Auto-delete if empty and no data worth preserving
+  if (props.node.name) return
+  if (isCommitted.value) {
+    const hasData = (node: CommittedNode): boolean =>
+      node.children.length > 0 || (node.durationMs ?? 0) > 0 ||
+      node.children.some(hasData)
+    if (!hasData(props.node as CommittedNode)) {
+      planning!.deleteCommitted(props.node.id)
+    }
+  } else {
+    const hasTime = tracker.getSubtreeMs(props.node as TaskNode) > 0
+    const hasLimit = tracker.getSubtreeLimitMs(props.node as TaskNode) !== null
+    const hasChildren = props.node.children.length > 0
+    if (!hasTime && !hasLimit && !hasChildren) {
+      tracker.deleteTask(props.node.id)
+    }
+  }
 }
 
 // Tab / Shift+Tab: indent or dedent
 function handleTabKey(event: KeyboardEvent) {
-  if (running.value) return
-  // Save whatever is in the name box first
-  tracker.renameTask(props.node.id, nameInput.value)
-  const warning = event.shiftKey
-    ? tracker.dedentTask(props.node.id)
-    : tracker.indentTask(props.node.id)
-  if (warning) alert(warning)
+  if (!isCommitted.value && running.value) return
+  if (isCommitted.value) {
+    planning!.renameCommitted(props.node.id, nameInput.value)
+    const warning = event.shiftKey
+      ? planning!.dedentCommitted(props.node.id)
+      : planning!.indentCommitted(props.node.id)
+    if (warning) alert(warning)
+  } else {
+    tracker.renameTask(props.node.id, nameInput.value)
+    const warning = event.shiftKey
+      ? tracker.dedentTask(props.node.id)
+      : tracker.indentTask(props.node.id)
+    if (warning) alert(warning)
+  }
 }
 
 // Delete with confirmation if the node has data worth preserving
 function handleDelete() {
-  const hasTime = tracker.getSubtreeMs(props.node) > 0
-  const hasLimit = tracker.getSubtreeLimitMs(props.node) !== null
-  const hasChildren = props.node.children.length > 0
-  if (hasTime || hasLimit || hasChildren) {
-    const reasons = [
-      hasTime && 'accumulated time',
-      hasLimit && 'a time limit',
-      hasChildren && 'subtasks',
-    ].filter(Boolean).join(', ')
-    if (!confirm(`"${props.node.name || 'Unnamed'}" has ${reasons}. Delete anyway?`)) return
+  if (isCommitted.value) {
+    const hasNonZero = (node: CommittedNode): boolean =>
+      (node.children.length === 0 ? (node.durationMs ?? 0) > 0 : node.children.some(hasNonZero))
+    const node = props.node as CommittedNode
+    const hasDuration = hasNonZero(node)
+    const hasChildren = node.children.length > 0
+    if (hasDuration || hasChildren) {
+      const reasons = [hasDuration && 'duration', hasChildren && 'subtasks']
+        .filter(Boolean)
+        .join(', ')
+      if (!confirm(`"${node.name || 'Unnamed'}" has ${reasons}. Delete anyway?`)) return
+    }
+    planning!.deleteCommitted(props.node.id)
+  } else {
+    const hasTime = tracker.getSubtreeMs(props.node as TaskNode) > 0
+    const hasLimit = tracker.getSubtreeLimitMs(props.node as TaskNode) !== null
+    const hasChildren = props.node.children.length > 0
+    if (hasTime || hasLimit || hasChildren) {
+      const reasons = [
+        hasTime && 'accumulated time',
+        hasLimit && 'a time limit',
+        hasChildren && 'subtasks',
+      ]
+        .filter(Boolean)
+        .join(', ')
+      if (!confirm(`"${props.node.name || 'Unnamed'}" has ${reasons}. Delete anyway?`)) return
+    }
+    tracker.deleteTask(props.node.id)
   }
-  tracker.deleteTask(props.node.id)
 }
 
-// Re-focus this node's name input after an indent/dedent operation.
-// immediate:true ensures it fires on remount (when the node moves in the tree).
+// Re-focus after indent/dedent — planned mode
 watch(
   () => tracker.focusNodeId.value,
   (id) => {
-    if (id !== props.node.id) return
+    if (isCommitted.value || id !== props.node.id) return
     tracker.focusNodeId.value = null
     nameInput.value = props.node.name
     editingName.value = true
-    // onNameMounted will fire for the freshly-mounted input and focus+select it
   },
   { immediate: true },
 )
 
-// Time editing (only for stopped leaves)
+// Re-focus after indent/dedent — committed mode
+watch(
+  () => planning?.committedFocusNodeId.value,
+  (id) => {
+    if (!isCommitted.value || id !== props.node.id) return
+    planning!.committedFocusNodeId.value = null
+    nameInput.value = props.node.name
+    editingName.value = true
+  },
+  { immediate: true },
+)
+
+// Time editing
 const editingTime = ref(false)
 const timeInput = ref('')
 function startEditTime() {
-  if (!isLeaf.value || running.value) return
-  editingTime.value = true
-  timeInput.value = displayTime.value
+  if (isCommitted.value) {
+    if (!isLeaf.value) return
+    editingTime.value = true
+    const cn = props.node as CommittedNode
+    timeInput.value = formatMs(cn.durationMs ?? 0)
+  } else {
+    if (!isLeaf.value || running.value) return
+    editingTime.value = true
+    timeInput.value = displayTime.value
+  }
 }
 function commitTime() {
-  const ms = parseTimeInput(timeInput.value)
-  if (ms !== null) {
-    tracker.setAccumulatedMs(props.node.id, ms)
+  if (timeInput.value.trim() === '' && isCommitted.value) {
+    planning!.setCommittedDuration(props.node.id, null)
+  } else {
+    const ms = parseTimeInput(timeInput.value)
+    if (ms !== null) {
+      if (isCommitted.value) {
+        planning!.setCommittedDuration(props.node.id, ms)
+      } else {
+        tracker.setAccumulatedMs(props.node.id, ms)
+      }
+    }
   }
   editingTime.value = false
 }
 
-// Time limit editing
+// Time limit editing (planned mode only)
 const editingLimit = ref(false)
 const limitInput = ref('')
 function startEditLimit() {
-  if (!isLeaf.value) return
+  if (isCommitted.value || !isLeaf.value) return
   editingLimit.value = true
-  limitInput.value = props.node.timeLimitMs !== null ? formatMs(props.node.timeLimitMs) : ''
+  limitInput.value = timeLimitMs.value !== null ? formatMs(timeLimitMs.value) : ''
 }
 function commitLimit() {
+  if (isCommitted.value) return
   if (limitInput.value.trim() === '') {
     tracker.setTimeLimit(props.node.id, null)
   } else {
@@ -145,12 +249,21 @@ function commitLimit() {
   editingLimit.value = false
 }
 
+// Struct button helpers (avoid non-null assertions in template)
+function doAddChild() {
+  if (isCommitted.value) planning?.addCommittedChild(props.node.id)
+  else tracker.addChild(props.node.id)
+}
+function doAddSibling() {
+  if (isCommitted.value) planning?.addCommittedSibling(props.node.id)
+  else tracker.addSibling(props.node.id)
+}
+
 // Always focus (and select existing text) when the name input is freshly mounted.
-// Function refs fire on every re-render, so track the last element to skip no-op calls.
 let lastNameInputEl: HTMLInputElement | null = null
 function onNameMounted(el: HTMLInputElement | null) {
   if (!el) { lastNameInputEl = null; return }
-  if (el === lastNameInputEl) return  // same element, just a re-render — skip
+  if (el === lastNameInputEl) return
   lastNameInputEl = el
   nextTick(() => { el.focus(); el.select() })
 }
@@ -171,7 +284,7 @@ function onNameMounted(el: HTMLInputElement | null) {
           placeholder="Task name…"
           @blur="commitName"
           @keydown.enter.prevent="commitAndAddSibling"
-          @keydown.escape.prevent="commitName"
+          @keydown.escape.prevent="handleEscape"
           @keydown.tab.prevent="handleTabKey($event)"
         />
         <span v-else class="name-text" @click="startEditName">{{ node.name }}</span>
@@ -192,12 +305,13 @@ function onNameMounted(el: HTMLInputElement | null) {
           <span
             v-else
             class="time-text"
-            :class="{ editable: isLeaf && !running }"
+            :class="{ editable: isLeaf && (!running || isCommitted) }"
             @click="startEditTime"
           >{{ displayTime }}</span>
         </span>
         <span v-if="timePct !== null" class="pct-cell time-pct">{{ timePct }}%</span>
-        <span class="limit-cell">
+        <!-- Limit cell: planned mode only -->
+        <span v-if="!isCommitted" class="limit-cell">
           <template v-if="isLeaf">
             <input
               v-if="editingLimit"
@@ -211,7 +325,7 @@ function onNameMounted(el: HTMLInputElement | null) {
             />
             <template v-else>
               <PieChart v-if="limitRatio !== null" :ratio="limitRatio" />
-              <span v-if="node.timeLimitMs !== null" class="limit-text" @click="startEditLimit">/{{ formatMs(node.timeLimitMs) }}</span>
+              <span v-if="timeLimitMs !== null" class="limit-text" @click="startEditLimit">/{{ formatMs(timeLimitMs ?? 0) }}</span>
               <span v-else class="limit-set" @click="startEditLimit"></span>
             </template>
           </template>
@@ -223,17 +337,17 @@ function onNameMounted(el: HTMLInputElement | null) {
         <span v-if="limitPct !== null" class="pct-cell limit-pct">{{ limitPct }}%</span>
         <!-- Reverse indent: shallower = wider gap, deeper = narrower (flush with controls) -->
         <span class="reverse-indent" :style="{ width: Math.max(0, 4 - depth) * 20 + 'px' }"></span>
-        <!-- Fixed-width button areas so controls never shift -->
+        <!-- Timer buttons: planned mode only -->
         <span class="timer-btns">
-          <template v-if="isLeaf && tracker.isToday.value">
+          <template v-if="!isCommitted && isLeaf && tracker.isToday.value">
             <button v-if="!running" class="btn btn-switch" @click="tracker.openPip().then(() => tracker.switchTimer(node.id))" title="Switch"></button>
             <button v-if="running" class="btn btn-stop" @click="tracker.stopTimer(node.id)" title="Stop"></button>
             <button v-if="!running" class="btn btn-share" @click="tracker.openPip().then(() => tracker.shareTimer(node.id))" title="Share"></button>
           </template>
         </span>
         <span class="struct-btns">
-          <button class="btn btn-struct btn-add-child" @click="tracker.addChild(node.id)" title="Add child"></button>
-          <button class="btn btn-struct btn-add-sibling" @click="tracker.addSibling(node.id)" title="Add sibling"></button>
+          <button class="btn btn-struct btn-add-child" @click="doAddChild" title="Add child"></button>
+          <button class="btn btn-struct btn-add-sibling" @click="doAddSibling" title="Add sibling"></button>
           <button class="btn btn-struct btn-delete" @click="handleDelete" title="Delete"></button>
         </span>
       </span>
@@ -245,6 +359,7 @@ function onNameMounted(el: HTMLInputElement | null) {
         :key="child.id"
         :node="child"
         :depth="depth + 1"
+        :mode="mode"
       />
     </ul>
   </li>
