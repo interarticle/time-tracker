@@ -1,6 +1,6 @@
 import { ref, computed, watch } from 'vue'
 import type { Ref } from 'vue'
-import type { CommittedNode, CommittedTreeData, Planning } from '@/types'
+import type { CommittedNode, CommittedTreeData, Planning, TimeTracker } from '@/types'
 import {
   loadPlanningSettings,
   savePlanningSettings,
@@ -35,7 +35,7 @@ function findParent(
   return { parent: null, index: -1 }
 }
 
-export function usePlanning(currentDateKey: Ref<string>): Planning {
+export function usePlanning(currentDateKey: Ref<string>, tracker: TimeTracker): Planning {
   // --- Settings (global, persists across days) ---
   const settings = loadPlanningSettings()
   const planningEnabled = ref(settings.enabled)
@@ -60,11 +60,13 @@ export function usePlanning(currentDateKey: Ref<string>): Planning {
   const dayData = loadPlanningDay(currentDateKey.value)
   const committedTree = ref<CommittedTreeData>({ roots: dayData.roots })
   const startOfDayMinutes = ref<number | null>(dayData.startOfDayMinutes)
+  const bufferLimitMs = ref<number | undefined>(dayData.bufferLimitMs)
 
   function persistDay() {
     savePlanningDay(currentDateKey.value, {
       startOfDayMinutes: startOfDayMinutes.value,
       roots: committedTree.value.roots,
+      bufferLimitMs: bufferLimitMs.value,
     })
   }
 
@@ -72,7 +74,13 @@ export function usePlanning(currentDateKey: Ref<string>): Planning {
     const d = loadPlanningDay(newKey)
     committedTree.value = { roots: d.roots }
     startOfDayMinutes.value = d.startOfDayMinutes
+    bufferLimitMs.value = d.bufferLimitMs
   })
+
+  function setBufferLimit(ms: number | undefined) {
+    bufferLimitMs.value = ms
+    persistDay()
+  }
 
   function setStartOfDay(minutes: number | null) {
     startOfDayMinutes.value = minutes
@@ -255,6 +263,57 @@ export function usePlanning(currentDateKey: Ref<string>): Planning {
     return startOfDayMinutes.value + timeAvailableMs.value / 60000
   })
 
+  // --- Lunch / Buffer computed ---
+  function dateKeyOf(ms: number): string {
+    const d = new Date(ms)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  const bufferAccumulatedMs = computed(() => {
+    const start = startOfDayMinutes.value
+    if (start === null) return 0
+    const limitMs = tracker.getTotalDayLimitMs()
+    if (!limitMs || limitMs <= 0) return 0
+
+    const startMs = start * 60000           // ms from midnight
+    const effectiveEndMs = startMs + limitMs // ms from midnight
+    const nowMs = tracker.now.value
+    const nowDateKey = dateKeyOf(nowMs)
+    const otherPlannedMs = tracker.getTotalDayMs()
+
+    if (currentDateKey.value > nowDateKey) return 0   // future day
+
+    if (currentDateKey.value < nowDateKey) {           // past day
+      return effectiveEndMs - startMs - otherPlannedMs
+    }
+
+    // Today: live
+    const nowDate = new Date(nowMs)
+    const nowFromMidnight =
+      (nowDate.getHours() * 60 + nowDate.getMinutes()) * 60000 +
+      nowDate.getSeconds() * 1000
+
+    if (nowFromMidnight <= startMs) return 0
+    if (nowFromMidnight >= effectiveEndMs) return effectiveEndMs - startMs - otherPlannedMs
+    return nowFromMidnight - startMs - otherPlannedMs
+  })
+
+  const bufferIsLive = computed(() => {
+    const start = startOfDayMinutes.value
+    if (start === null) return false
+    const limitMs = tracker.getTotalDayLimitMs()
+    if (!limitMs || limitMs <= 0) return false
+    if (dateKeyOf(tracker.now.value) !== currentDateKey.value) return false
+
+    const nowDate = new Date(tracker.now.value)
+    const nowFromMidnight =
+      (nowDate.getHours() * 60 + nowDate.getMinutes()) * 60000 +
+      nowDate.getSeconds() * 1000
+    const startMs = start * 60000
+    const effectiveEndMs = startMs + limitMs
+    return nowFromMidnight > startMs && nowFromMidnight < effectiveEndMs
+  })
+
   return {
     planningEnabled,
     dailyLimitMs,
@@ -276,5 +335,9 @@ export function usePlanning(currentDateKey: Ref<string>): Planning {
     timeAvailableMs,
     endOfDayMinutes,
     getCommittedSubtreeMs,
+    bufferLimitMs,
+    setBufferLimit,
+    bufferAccumulatedMs,
+    bufferIsLive,
   }
 }

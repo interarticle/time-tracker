@@ -37,9 +37,12 @@ export interface CommittedTreeData {
   roots: CommittedNode[]
 }
 
+export const BUFFER_NAME = 'Lunch / Buffer'
+
 export interface PlanningDayData {
   startOfDayMinutes: number | null
   roots: CommittedNode[]
+  bufferLimitMs?: number
 }
 
 export interface PlanningSettings {
@@ -122,6 +125,11 @@ export interface Planning {
   timeAvailableMs: ComputedRef<number>
   endOfDayMinutes: ComputedRef<number | null>
   getCommittedSubtreeMs: (node: CommittedNode) => number
+  // Lunch / Buffer item
+  bufferLimitMs: Ref<number | undefined>
+  setBufferLimit: (ms: number | undefined) => void
+  bufferAccumulatedMs: ComputedRef<number>
+  bufferIsLive: ComputedRef<boolean>
 }
 
 export const PlanningKey: InjectionKey<Planning> = Symbol('Planning')

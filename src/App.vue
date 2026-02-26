@@ -11,7 +11,7 @@ import PlanningInfoBar from '@/components/PlanningInfoBar.vue'
 import CategoryBreakdown from '@/components/CategoryBreakdown.vue'
 
 const tracker = useTimeTracker()
-const planning = usePlanning(tracker.currentDateKey)
+const planning = usePlanning(tracker.currentDateKey, tracker)
 const buildInfo = `${__COMMIT__} · built on ${__BUILD_TIME__}`
 provide(TimeTrackerKey, tracker)
 provide(PlanningKey, planning)

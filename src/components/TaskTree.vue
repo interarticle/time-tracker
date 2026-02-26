@@ -3,6 +3,7 @@ import { inject, computed } from 'vue'
 import { TimeTrackerKey, PlanningKey } from '@/types'
 import type { CommittedNode, TaskNode as TaskNodeData } from '@/types'
 import TaskNode from './TaskNode.vue'
+import BufferItem from './BufferItem.vue'
 import { formatMsHM, formatMinutes } from '@/utils/format'
 
 const props = defineProps<{ mode?: 'planned' | 'committed' }>()
@@ -86,6 +87,9 @@ const effectiveEndMinutes = computed(() => {
       </ul>
       <button v-if="!isCommitted" class="add-root-btn" @click="tracker.addRoot()">+ Add Task</button>
     </template>
+
+    <!-- Permanent buffer item: planned mode + planning enabled -->
+    <BufferItem v-if="!isCommitted && planning?.planningEnabled.value" />
   </div>
 </template>
 

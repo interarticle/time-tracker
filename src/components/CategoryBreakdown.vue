@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { inject, ref, computed } from 'vue'
-import { TimeTrackerKey, PlanningKey } from '@/types'
+import { TimeTrackerKey, PlanningKey, BUFFER_NAME } from '@/types'
 import type { CommittedNode, TaskNode } from '@/types'
 import { formatMsHM } from '@/utils/format'
 
@@ -76,6 +76,31 @@ const categories = computed((): CategoryEntry[] => {
       color: COLORS[colorIdx % COLORS.length]!,
     })
     colorIdx++
+  }
+
+  // Merge the permanent buffer item into its category
+  const bufferKey = BUFFER_NAME.toLowerCase()
+  const bufMs = planning.bufferAccumulatedMs.value
+  const bufLim = planning.bufferLimitMs.value
+  if (bufMs > 0 || bufLim !== undefined) {
+    const existingIdx = entries.findIndex((e) => e.key === bufferKey)
+    if (existingIdx >= 0) {
+      const e = entries[existingIdx]!
+      e.usedMs += bufMs
+      if (bufLim !== undefined) {
+        e.limitMs = (e.limitMs ?? 0) + bufLim
+      }
+    } else {
+      entries.push({
+        key: bufferKey,
+        displayName: BUFFER_NAME,
+        committedMs: 0,
+        usedMs: bufMs,
+        limitMs: bufLim ?? null,
+        color: COLORS[colorIdx % COLORS.length]!,
+      })
+      colorIdx++
+    }
   }
 
   // Sort: matched first, then committed-only, then planned-only; alpha within groups
