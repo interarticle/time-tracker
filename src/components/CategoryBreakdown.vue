@@ -102,6 +102,10 @@ function plannedPct(c: CategoryEntry): number {
   if (totalLimitMs.value <= 0) return 0
   return ((c.limitMs ?? c.usedMs) / totalLimitMs.value) * 100
 }
+function arrowColor(c: CategoryEntry): string {
+  if (c.limitMs === null) return '#888'
+  return c.usedMs > c.limitMs ? '#c62828' : '#2e7d32'
+}
 </script>
 
 <template>
@@ -113,24 +117,24 @@ function plannedPct(c: CategoryEntry): number {
 
     <div v-if="expanded" class="breakdown-body">
       <!-- Used bar -->
-      <div class="bar-row" title="Used time by category">
+      <div class="bar-row" title="Actual time used — each segment's width shows that category's share of total used time">
         <div
           v-for="c in categories"
           :key="c.key + '-used'"
           class="bar-seg"
           :style="{ width: usedPct(c) + '%', background: c.color }"
-          :title="c.displayName + ': ' + formatMsHM(c.usedMs)"
+          :title="c.displayName + ': ' + formatMsHM(c.usedMs) + ' used (' + Math.round(usedPct(c)) + '% of day)'"
         ></div>
       </div>
 
       <!-- Planned bar -->
-      <div class="bar-row planned-bar" title="Planned time by category">
+      <div class="bar-row planned-bar" title="Planned/limit time — each segment's width shows that category's share of total planned time">
         <div
           v-for="c in categories"
           :key="c.key + '-plan'"
           class="bar-seg planned-seg"
           :style="{ width: plannedPct(c) + '%', background: c.color }"
-          :title="c.displayName + ': ' + (c.limitMs !== null ? formatMsHM(c.limitMs) : 'no limit')"
+          :title="c.displayName + ': ' + (c.limitMs !== null ? formatMsHM(c.limitMs) + ' planned (' + Math.round(plannedPct(c)) + '% of day)' : 'no limit')"
         ></div>
       </div>
 
@@ -139,11 +143,14 @@ function plannedPct(c: CategoryEntry): number {
         <div v-for="c in categories" :key="c.key" class="detail-row">
           <span class="cat-swatch" :style="{ background: c.color }"></span>
           <span class="cat-name">{{ c.displayName }}</span>
-          <span class="cat-used">{{ formatMsHM(c.usedMs) }}</span>
+          <span
+            class="cat-used"
+            :style="{ color: c.limitMs !== null && c.usedMs > c.limitMs ? '#c62828' : '#555' }"
+          >{{ formatMsHM(c.usedMs) }}</span>
           <span
             class="cat-pct-arrow"
-            :style="{ color: usedPct(c) >= plannedPct(c) ? '#2e7d32' : '#c62828' }"
-          >{{ Math.round(usedPct(c)) }}%&nbsp;→&nbsp;{{ Math.round(plannedPct(c)) }}%</span>
+            :style="{ color: arrowColor(c) }"
+          >{{ Math.round(usedPct(c)) }}%&nbsp;←&nbsp;{{ Math.round(plannedPct(c)) }}%</span>
           <span v-if="c.limitMs !== null" class="cat-limit">/ {{ formatMsHM(c.limitMs) }}</span>
         </div>
       </div>
