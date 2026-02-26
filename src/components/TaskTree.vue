@@ -3,7 +3,7 @@ import { inject, computed } from 'vue'
 import { TimeTrackerKey, PlanningKey } from '@/types'
 import type { CommittedNode, TaskNode as TaskNodeData } from '@/types'
 import TaskNode from './TaskNode.vue'
-import { formatMsHM } from '@/utils/format'
+import { formatMsHM, formatMinutes } from '@/utils/format'
 
 const props = defineProps<{ mode?: 'planned' | 'committed' }>()
 
@@ -32,6 +32,16 @@ function formatRemaining(ms: number): string {
   const sign = ms > 0 ? '+' : ms < 0 ? '−' : ''
   return sign + formatMsHM(Math.abs(ms))
 }
+
+// Effective end of day: start + (committed + planned limits) / 60000
+// Differs from planning.endOfDayMinutes when planned limits exceed available time
+const effectiveEndMinutes = computed(() => {
+  const start = planning?.startOfDayMinutes.value
+  if (start === null || start === undefined) return null
+  const committedMs = planning?.committedTotalMs.value ?? 0
+  const plannedLimitsMs = tracker.getTotalDayLimitMs() ?? 0
+  return Math.round(start + (committedMs + plannedLimitsMs) / 60000)
+})
 </script>
 
 <template>
@@ -52,6 +62,13 @@ function formatRemaining(ms: number): string {
         <span class="ph-label">Remaining:</span>
         <span class="ph-value" :style="{ color: remainingColor }">{{ formatRemaining(remainingMs) }}</span>
       </span>
+      <template v-if="effectiveEndMinutes !== null">
+        <span class="ph-sep">│</span>
+        <span class="ph-item">
+          <span class="ph-label">Eff. end:</span>
+          <span class="ph-value" :style="{ color: remainingMs < 0 ? '#c62828' : '#333' }">{{ formatMinutes(effectiveEndMinutes) }}</span>
+        </span>
+      </template>
     </div>
 
     <div v-if="roots.length === 0" class="empty-state">
