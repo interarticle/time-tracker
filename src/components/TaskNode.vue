@@ -89,15 +89,34 @@ function commitName() {
   editingName.value = false
 }
 
-// Enter: save name and create a sibling below
-function commitAndAddSibling() {
+// Enter in name field: leaf → focus time/limit field; non-leaf → add sibling
+function handleNameEnter() {
   if (!isCommitted.value && running.value) { commitName(); return }
   commitName()
-  if (isCommitted.value) {
-    planning!.addCommittedSibling(props.node.id)
-  } else {
-    tracker.addSibling(props.node.id)
+  if (!isLeaf.value) {
+    if (isCommitted.value) planning!.addCommittedSibling(props.node.id)
+    else tracker.addSibling(props.node.id)
+    return
   }
+  // Leaf: move focus to the time/limit field
+  if (isCommitted.value) {
+    editingTime.value = true
+    timeInput.value = formatMs((props.node as CommittedNode).durationMs ?? 0)
+  } else {
+    editingLimit.value = true
+    limitInput.value = timeLimitMs.value !== null ? formatMs(timeLimitMs.value) : ''
+  }
+}
+
+// Enter in time/limit field: commit + add sibling
+function commitTimeAndAddSibling() {
+  commitTime()
+  if (isCommitted.value) planning!.addCommittedSibling(props.node.id)
+  else tracker.addSibling(props.node.id)
+}
+function commitLimitAndAddSibling() {
+  commitLimit()
+  tracker.addSibling(props.node.id)
 }
 
 // Escape: save name; auto-delete if empty with no data
@@ -283,7 +302,7 @@ function onNameMounted(el: HTMLInputElement | null) {
           class="name-input"
           placeholder="Task name…"
           @blur="commitName"
-          @keydown.enter.prevent="commitAndAddSibling"
+          @keydown.enter.prevent="handleNameEnter"
           @keydown.escape.prevent="handleEscape"
           @keydown.tab.prevent="handleTabKey($event)"
         />
@@ -298,7 +317,7 @@ function onNameMounted(el: HTMLInputElement | null) {
             v-model="timeInput"
             class="cell-input"
             @blur="commitTime"
-            @keydown.enter="($event.target as HTMLInputElement).blur()"
+            @keydown.enter.prevent="commitTimeAndAddSibling"
             @keydown.escape="editingTime = false"
             @vue:mounted="($event: any) => $event.el.focus()"
           />
@@ -319,7 +338,7 @@ function onNameMounted(el: HTMLInputElement | null) {
               class="cell-input"
               placeholder="H:MM:SS"
               @blur="commitLimit"
-              @keydown.enter="($event.target as HTMLInputElement).blur()"
+              @keydown.enter.prevent="commitLimitAndAddSibling"
               @keydown.escape="editingLimit = false"
               @vue:mounted="($event: any) => $event.el.focus()"
             />
