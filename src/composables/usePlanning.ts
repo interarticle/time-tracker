@@ -277,6 +277,23 @@ export function usePlanning(currentDateKey: Ref<string>, tracker: TimeTracker): 
     return startOfDayMinutes.value + timeAvailableMs.value / 60000
   })
 
+  // --- Absolute EOD timestamp (today only) ---
+  const absoluteEffectiveEndMs = computed<number | null>(() => {
+    if (startOfDayMinutes.value === null) return null
+    if (!tracker.isToday.value) return null
+    const totalLimitMs = (tracker.getTotalDayLimitMs() ?? 0) + (bufferLimitMs.value ?? 0)
+    if (totalLimitMs <= 0) return null
+    const d = new Date(tracker.now.value)
+    const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+    return midnight + startOfDayMinutes.value * 60000 + totalLimitMs
+  })
+
+  const timeToEodMs = computed<number | null>(() => {
+    const eodMs = absoluteEffectiveEndMs.value
+    if (eodMs === null) return null
+    return eodMs - tracker.now.value
+  })
+
   // --- Lunch / Buffer computed ---
   function dateKeyOf(ms: number): string {
     const d = new Date(ms)
@@ -369,5 +386,7 @@ export function usePlanning(currentDateKey: Ref<string>, tracker: TimeTracker): 
     setBufferLimit,
     bufferAccumulatedMs,
     bufferIsLive,
+    absoluteEffectiveEndMs,
+    timeToEodMs,
   }
 }

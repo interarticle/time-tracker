@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { provide, computed, ref } from 'vue'
+import { provide, computed, ref, watch, onMounted } from 'vue'
 import { TimeTrackerKey, PlanningKey } from '@/types'
 import { useTimeTracker } from '@/composables/useTimeTracker'
 import { usePlanning } from '@/composables/usePlanning'
@@ -16,12 +16,55 @@ const buildInfo = `${__COMMIT__} · built on ${__BUILD_TIME__}`
 provide(TimeTrackerKey, tracker)
 provide(PlanningKey, planning)
 
-// Header rollup
+// Header rollup (uses full total including night time)
 const totalDayMs = computed(() => {
   if (planning.planningEnabled.value) {
-    return tracker.getTotalDayMs() + planning.committedTotalMs.value
+    return tracker.getTotalAllMs() + planning.committedTotalMs.value
   }
-  return tracker.getTotalDayMs()
+  return tracker.getTotalAllMs()
+})
+
+// Returns true only if running timers were started before EOD (day timers, not night)
+function hasDayTimersRunning(eodMs: number): boolean {
+  const state = tracker.dayState.value
+  if (state.runningTimerIds.length === 0) return false
+  const lastChange = state.lastStateChangeAt
+  return lastChange !== null && lastChange < eodMs
+}
+
+// Sync EOD timestamp to tracker + handle EOD regression
+watch(
+  () => planning.absoluteEffectiveEndMs.value,
+  (eodMs) => {
+    tracker.setEodTimestamp(eodMs ?? null)
+    if (eodMs !== null && eodMs < Date.now() && hasDayTimersRunning(eodMs)) {
+      tracker.stopAllAtEod(eodMs)
+      alert('End of day moved to the past — timers stopped.')
+    }
+  },
+  { immediate: true },
+)
+
+// Live EOD crossing detection (ticks every 200ms via tracker.now)
+watch(
+  () => tracker.now.value,
+  (nowMs) => {
+    const eodMs = planning.absoluteEffectiveEndMs.value
+    if (eodMs === null) return
+    if (nowMs >= eodMs && hasDayTimersRunning(eodMs)) {
+      tracker.stopAllAtEod(eodMs)
+      alert('End of day reached — timers stopped.')
+    }
+  },
+)
+
+// Retroactive stop on page load
+onMounted(() => {
+  const eodMs = planning.absoluteEffectiveEndMs.value
+  if (eodMs !== null && Date.now() > eodMs && hasDayTimersRunning(eodMs)) {
+    tracker.stopAllAtEod(eodMs)
+    alert('Timers were running past end of day — they have been stopped retroactively.')
+  }
 })
 const totalDayLimitMs = computed(() => {
   if (planning.planningEnabled.value) {

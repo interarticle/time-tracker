@@ -83,8 +83,11 @@ export function useTimeTracker(): TimeTracker {
       const existingTimer = dayState.value.timers[parentId]
       const childNode: TaskNode = { id: newId(), name: '', children: [], timeLimitMs: null }
       parent.children.push(childNode)
-      if (existingTimer && existingTimer.accumulatedMs > 0) {
-        dayState.value.timers[childNode.id] = { accumulatedMs: existingTimer.accumulatedMs }
+      if (existingTimer && (existingTimer.accumulatedMs > 0 || (existingTimer.nightAccumulatedMs ?? 0) > 0)) {
+        dayState.value.timers[childNode.id] = {
+          accumulatedMs: existingTimer.accumulatedMs,
+          ...(existingTimer.nightAccumulatedMs ? { nightAccumulatedMs: existingTimer.nightAccumulatedMs } : {}),
+        }
         delete dayState.value.timers[parentId]
         persistDayState()
       }
@@ -269,22 +272,68 @@ export function useTimeTracker(): TimeTracker {
     dayState.value = loadDayState(newKey)
   })
 
+  // --- EOD / night mode ---
+  const eodTimestamp = ref<number | null>(null)
+
+  function setEodTimestamp(ms: number | null) {
+    eodTimestamp.value = ms
+  }
+
+  const isAfterEod = computed(() => {
+    const eod = eodTimestamp.value
+    if (eod === null) return false
+    return now.value >= eod
+  })
+
+  const hasAnyNightTime = computed(() =>
+    Object.values(dayState.value.timers).some((t) => (t.nightAccumulatedMs ?? 0) > 0),
+  )
+
   // --- Flush pattern ---
   function flush() {
     const state = dayState.value
     if (state.lastStateChangeAt === null || state.runningTimerIds.length === 0) return
 
-    const now = Date.now()
-    const elapsed = now - state.lastStateChangeAt
+    const nowMs = Date.now()
+    const elapsed = nowMs - state.lastStateChangeAt
     const share = elapsed / state.runningTimerIds.length
 
+    const eod = eodTimestamp.value
+    const isNight = eod !== null && state.lastStateChangeAt >= eod
+
     for (const id of state.runningTimerIds) {
-      if (!state.timers[id]) {
-        state.timers[id] = { accumulatedMs: 0 }
+      if (!state.timers[id]) state.timers[id] = { accumulatedMs: 0 }
+      if (isNight) {
+        state.timers[id].nightAccumulatedMs = (state.timers[id].nightAccumulatedMs ?? 0) + share
+      } else {
+        state.timers[id].accumulatedMs += share
       }
-      state.timers[id].accumulatedMs += share
     }
-    state.lastStateChangeAt = now
+    state.lastStateChangeAt = nowMs
+  }
+
+  function stopAllAtEod(eodMs: number) {
+    const state = dayState.value
+    if (state.runningTimerIds.length === 0) return
+    const nowMs = Date.now()
+    const numRunning = state.runningTimerIds.length
+    const lastChange = state.lastStateChangeAt ?? nowMs
+
+    const dayMs = Math.max(0, Math.min(eodMs, nowMs) - lastChange)
+    const dayShare = dayMs / numRunning
+    const nightMs = Math.max(0, nowMs - Math.max(eodMs, lastChange))
+    const nightShare = nightMs / numRunning
+
+    for (const id of state.runningTimerIds) {
+      if (!state.timers[id]) state.timers[id] = { accumulatedMs: 0 }
+      state.timers[id].accumulatedMs += dayShare
+      if (nightShare > 0) {
+        state.timers[id].nightAccumulatedMs = (state.timers[id].nightAccumulatedMs ?? 0) + nightShare
+      }
+    }
+    state.runningTimerIds = []
+    state.lastStateChangeAt = null
+    persistDayState()
   }
 
   function switchTimer(id: string) {
@@ -338,18 +387,64 @@ export function useTimeTracker(): TimeTracker {
     if (!dayState.value.timers[id]) {
       dayState.value.timers[id] = { accumulatedMs: 0 }
     }
-    dayState.value.timers[id].accumulatedMs = ms
+    const timer = dayState.value.timers[id]
+    timer.accumulatedMs = ms
     persistDayState()
     clearNotificationState(id)
+  }
+
+  function setNightAccumulatedMs(id: string, ms: number) {
+    if (!dayState.value.timers[id]) {
+      dayState.value.timers[id] = { accumulatedMs: 0 }
+    }
+    dayState.value.timers[id].nightAccumulatedMs = ms
+    persistDayState()
   }
 
   // --- Display helpers ---
   const now = ref(Date.now())
 
+  // Total time (day + night + running), used for display
   function getDisplayMs(id: string): number {
     const timer = dayState.value.timers[id]
-    const base = timer ? timer.accumulatedMs : 0
+    const base = timer ? (timer.accumulatedMs + (timer.nightAccumulatedMs ?? 0)) : 0
     if (
+      dayState.value.runningTimerIds.includes(id) &&
+      dayState.value.lastStateChangeAt !== null
+    ) {
+      const elapsed = now.value - dayState.value.lastStateChangeAt
+      return base + elapsed / dayState.value.runningTimerIds.length
+    }
+    return base
+  }
+
+  // Day-only time (for buffer calculation)
+  function getDayDisplayMs(id: string): number {
+    const timer = dayState.value.timers[id]
+    if (!timer) return 0
+    const base = timer.accumulatedMs
+    const eod = eodTimestamp.value
+    const isNight = eod !== null && dayState.value.lastStateChangeAt !== null && dayState.value.lastStateChangeAt >= eod
+    if (
+      !isNight &&
+      dayState.value.runningTimerIds.includes(id) &&
+      dayState.value.lastStateChangeAt !== null
+    ) {
+      const elapsed = now.value - dayState.value.lastStateChangeAt
+      return base + elapsed / dayState.value.runningTimerIds.length
+    }
+    return base
+  }
+
+  // Night-only time
+  function getNightDisplayMs(id: string): number {
+    const timer = dayState.value.timers[id]
+    if (!timer) return 0
+    const base = timer.nightAccumulatedMs ?? 0
+    const eod = eodTimestamp.value
+    const isNight = eod !== null && dayState.value.lastStateChangeAt !== null && dayState.value.lastStateChangeAt >= eod
+    if (
+      isNight &&
       dayState.value.runningTimerIds.includes(id) &&
       dayState.value.lastStateChangeAt !== null
     ) {
@@ -362,6 +457,11 @@ export function useTimeTracker(): TimeTracker {
   function getSubtreeMs(node: TaskNode): number {
     if (isLeaf(node)) return getDisplayMs(node.id)
     return node.children.reduce((sum, child) => sum + getSubtreeMs(child), 0)
+  }
+
+  function getDaySubtreeMs(node: TaskNode): number {
+    if (isLeaf(node)) return getDayDisplayMs(node.id)
+    return node.children.reduce((sum, child) => sum + getDaySubtreeMs(child), 0)
   }
 
   /** Returns the sum of all leaf limits in the subtree, or null if no leaf has a limit. */
@@ -379,7 +479,13 @@ export function useTimeTracker(): TimeTracker {
     return hasAny ? total : null
   }
 
+  // Day-only total — used for buffer calculation
   function getTotalDayMs(): number {
+    return tree.value.roots.reduce((sum, root) => sum + getDaySubtreeMs(root), 0)
+  }
+
+  // Full total (day + night) — used for rollup display
+  function getTotalAllMs(): number {
     return tree.value.roots.reduce((sum, root) => sum + getSubtreeMs(root), 0)
   }
 
@@ -505,9 +611,15 @@ export function useTimeTracker(): TimeTracker {
         const elapsed = midnight - state.lastStateChangeAt
         if (elapsed > 0) {
           const share = elapsed / state.runningTimerIds.length
+          const eod = eodTimestamp.value
+          const isNight = eod !== null && state.lastStateChangeAt >= eod
           for (const id of state.runningTimerIds) {
             if (!state.timers[id]) state.timers[id] = { accumulatedMs: 0 }
-            state.timers[id].accumulatedMs += share
+            if (isNight) {
+              state.timers[id].nightAccumulatedMs = (state.timers[id].nightAccumulatedMs ?? 0) + share
+            } else {
+              state.timers[id].accumulatedMs += share
+            }
           }
         }
         state.runningTimerIds = []
@@ -565,6 +677,7 @@ export function useTimeTracker(): TimeTracker {
       .pip-time { font-family: monospace; font-size: 13px; color: #333; flex-shrink: 0; }
       .pip-pie { flex-shrink: 0; display: flex; align-items: center; }
       .pip-limit { font-family: monospace; font-size: 12px; color: #999; flex-shrink: 0; }
+      #pip-eod { font-size: 11px; text-align: center; padding: 2px 0; flex-shrink: 0; min-height: 14px; }
       #pip-stop { background: #c62828; color: #fff; border: none; border-radius: 4px; padding: 6px; cursor: pointer; font-size: 12px; font-weight: 500; width: 100%; flex-shrink: 0; }
       #pip-stop:hover { background: #b71c1c; }
       @keyframes pw { 0%,100% { background:#fff8e1; } 50% { background:#ffe082; } }
@@ -573,11 +686,14 @@ export function useTimeTracker(): TimeTracker {
     doc.head.appendChild(style)
     const tasks = doc.createElement('div')
     tasks.id = 'pip-tasks'
+    const eodEl = doc.createElement('div')
+    eodEl.id = 'pip-eod'
     const stopBtn = doc.createElement('button')
     stopBtn.id = 'pip-stop'
     stopBtn.textContent = 'Stop All'
     stopBtn.addEventListener('click', () => { stopAll(); window.focus() })
     doc.body.appendChild(tasks)
+    doc.body.appendChild(eodEl)
     doc.body.appendChild(stopBtn)
   }
 
@@ -624,6 +740,29 @@ export function useTimeTracker(): TimeTracker {
       (row.querySelector('.pip-time') as HTMLElement).textContent = formatMs(ms);
       (row.querySelector('.pip-pie') as HTMLElement).innerHTML = limit !== null && limit > 0 ? pieSvgHtml(ms / limit) : '';
       (row.querySelector('.pip-limit') as HTMLElement).textContent = limit !== null ? '/' + formatMs(limit) : ''
+    }
+
+    const eodEl = doc.getElementById('pip-eod')
+    if (eodEl) {
+      const eod = eodTimestamp.value
+      if (eod !== null) {
+        const remaining = eod - now.value
+        if (remaining > 0 && remaining <= 3600000) {
+          const mins = Math.floor(remaining / 60000)
+          const secs = Math.floor((remaining % 60000) / 1000)
+          eodEl.textContent = `⚠ EOD in ${mins}:${String(secs).padStart(2, '0')}`
+          eodEl.style.color = remaining < 600000 ? '#c62828' : '#e67e22'
+          eodEl.style.fontWeight = '600'
+        } else if (remaining <= 0) {
+          eodEl.textContent = '🌙 Night mode'
+          eodEl.style.color = '#1565c0'
+          eodEl.style.fontWeight = '600'
+        } else {
+          eodEl.textContent = ''
+        }
+      } else {
+        eodEl.textContent = ''
+      }
     }
   }
 
@@ -688,13 +827,21 @@ export function useTimeTracker(): TimeTracker {
     shareTimer,
     stopAll,
     setAccumulatedMs,
+    setNightAccumulatedMs,
     getDisplayMs,
+    getDayDisplayMs,
+    getNightDisplayMs,
     getSubtreeMs,
     getSubtreeLimitMs,
     getTotalDayMs,
+    getTotalAllMs,
     getTotalDayLimitMs,
     isRunning,
     now,
+    setEodTimestamp,
+    stopAllAtEod,
+    isAfterEod,
+    hasAnyNightTime,
     sendTestNotification,
     openPip,
     focusNodeId,

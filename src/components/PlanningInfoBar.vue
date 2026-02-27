@@ -5,6 +5,15 @@ import { formatMsHM, formatMinutes, parseClockHHMM, parseHoursMinutes } from '@/
 
 const planning = inject(PlanningKey)!
 
+// EOD countdown — shown when within 1 hour of EOD
+const eodCountdown = computed(() => {
+  const ms = planning.timeToEodMs.value
+  if (ms === null || ms <= 0 || ms > 3600000) return null
+  const mins = Math.floor(ms / 60000)
+  const secs = Math.floor((ms % 60000) / 1000)
+  return `${mins}:${String(secs).padStart(2, '0')}`
+})
+
 // --- Daily limit ---
 const editingLimit = ref(false)
 const limitInput = ref('')
@@ -116,6 +125,12 @@ function commitStart() {
       <span class="info-label">End of day:</span>
       <span class="info-value">{{ endDisplay }}</span>
     </span>
+    <template v-if="eodCountdown !== null">
+      <span class="info-sep">│</span>
+      <span class="info-item eod-warn">
+        <span class="eod-warn-text">⚠ EOD in {{ eodCountdown }}</span>
+      </span>
+    </template>
   </div>
 </template>
 
@@ -150,6 +165,16 @@ function commitStart() {
 }
 .info-sep {
   color: #ddd;
+}
+.eod-warn-text {
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-weight: 600;
+  color: #e67e22;
+  animation: eod-pulse 1s ease-in-out infinite;
+}
+@keyframes eod-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 .info-input {
   width: 60px;

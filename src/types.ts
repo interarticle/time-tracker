@@ -14,6 +14,7 @@ export interface TaskTreeData {
 
 export interface LeafTimerData {
   accumulatedMs: number
+  nightAccumulatedMs?: number
 }
 
 export interface DayTimerState {
@@ -76,15 +77,25 @@ export interface TimeTracker {
   shareTimer: (id: string) => void
   stopAll: () => void
   setAccumulatedMs: (id: string, ms: number) => void
+  setNightAccumulatedMs: (id: string, ms: number) => void
 
   // Display helpers
   getDisplayMs: (id: string) => number
+  getDayDisplayMs: (id: string) => number
+  getNightDisplayMs: (id: string) => number
   getSubtreeMs: (node: TaskNode) => number
   getSubtreeLimitMs: (node: TaskNode) => number | null
   getTotalDayMs: () => number
+  getTotalAllMs: () => number
   getTotalDayLimitMs: () => number | null
   isRunning: (id: string) => boolean
   now: Ref<number>
+
+  // EOD / night mode
+  setEodTimestamp: (ms: number | null) => void
+  stopAllAtEod: (eodMs: number) => void
+  isAfterEod: ComputedRef<boolean>
+  hasAnyNightTime: ComputedRef<boolean>
 
   // Notifications
   sendTestNotification: () => Promise<void>
@@ -132,6 +143,9 @@ export interface Planning {
   setBufferLimit: (ms: number | undefined) => void
   bufferAccumulatedMs: ComputedRef<number>
   bufferIsLive: ComputedRef<boolean>
+  // EOD
+  absoluteEffectiveEndMs: ComputedRef<number | null>
+  timeToEodMs: ComputedRef<number | null>
 }
 
 export const PlanningKey: InjectionKey<Planning> = Symbol('Planning')

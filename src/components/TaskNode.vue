@@ -15,6 +15,7 @@ const isCommitted = computed(() => props.mode === 'committed')
 const isLeaf = computed(() => props.node.children.length === 0)
 
 const running = computed(() => !isCommitted.value && tracker.isRunning(props.node.id))
+const isAfterEod = computed(() => tracker.isAfterEod.value)
 
 const displayMs = computed(() => {
   if (isCommitted.value) {
@@ -25,6 +26,21 @@ const displayMs = computed(() => {
     : tracker.getSubtreeMs(props.node as TaskNode)
 })
 const displayTime = computed(() => formatMs(displayMs.value))
+
+// Night time (leaves in planned mode only)
+const nightMs = computed(() => {
+  if (isCommitted.value || !isLeaf.value) return 0
+  return tracker.getNightDisplayMs(props.node.id)
+})
+const hasNight = computed(() => nightMs.value > 0)
+const nightTime = computed(() => formatMs(nightMs.value))
+
+// Day portion when night exists
+const dayMs = computed(() => {
+  if (!hasNight.value || isCommitted.value || !isLeaf.value) return displayMs.value
+  return tracker.getDayDisplayMs(props.node.id)
+})
+const dayTime = computed(() => formatMs(dayMs.value))
 
 // timeLimitMs is only relevant in planned mode
 const timeLimitMs = computed(() => {
@@ -44,7 +60,7 @@ const limitRatio = computed(() => {
 // Percentage of day totals (root nodes only, planned mode only)
 const timePct = computed(() => {
   if (isCommitted.value || props.depth !== 0) return null
-  const total = tracker.getTotalDayMs()
+  const total = tracker.getTotalAllMs()
   if (total <= 0) return null
   return Math.round((displayMs.value / total) * 100)
 })
@@ -216,21 +232,26 @@ watch(
   { immediate: true },
 )
 
-// Time editing
+// Time editing — 'day' edits accumulatedMs, 'night' edits nightAccumulatedMs
 const editingTime = ref(false)
+const editingWhich = ref<'day' | 'night'>('day')
 const timeInput = ref('')
-function startEditTime() {
+
+function startEditTime(which: 'day' | 'night' = 'day') {
   if (isCommitted.value) {
     if (!isLeaf.value) return
     editingTime.value = true
+    editingWhich.value = 'day'
     const cn = props.node as CommittedNode
     timeInput.value = formatMs(cn.durationMs ?? 0)
   } else {
     if (!isLeaf.value || running.value) return
     editingTime.value = true
-    timeInput.value = displayTime.value
+    editingWhich.value = which
+    timeInput.value = which === 'night' ? nightTime.value : dayTime.value
   }
 }
+
 function commitTime() {
   if (timeInput.value.trim() === '' && isCommitted.value) {
     planning!.setCommittedDuration(props.node.id, null)
@@ -239,6 +260,8 @@ function commitTime() {
     if (ms !== null) {
       if (isCommitted.value) {
         planning!.setCommittedDuration(props.node.id, ms)
+      } else if (editingWhich.value === 'night') {
+        tracker.setNightAccumulatedMs(props.node.id, ms)
       } else {
         tracker.setAccumulatedMs(props.node.id, ms)
       }
@@ -257,6 +280,12 @@ function startEditLimit() {
 }
 function commitLimit() {
   if (isCommitted.value) return
+  if (tracker.hasAnyNightTime.value) {
+    if (!confirm('Night time has been accumulated. Changing limits after end of day — proceed?')) {
+      editingLimit.value = false
+      return
+    }
+  }
   if (limitInput.value.trim() === '') {
     tracker.setTimeLimit(props.node.id, null)
   } else {
@@ -321,12 +350,17 @@ function onNameMounted(el: HTMLInputElement | null) {
             @keydown.escape="editingTime = false"
             @vue:mounted="($event: any) => $event.el.focus()"
           />
-          <span
-            v-else
-            class="time-text"
-            :class="{ editable: isLeaf && (!running || isCommitted) }"
-            @click="startEditTime"
-          >{{ displayTime }}</span>
+          <span v-else class="time-text">
+            <span
+              :class="{ editable: isLeaf && (!running || isCommitted) }"
+              @click="startEditTime('day')"
+            >{{ hasNight ? dayTime : displayTime }}</span>
+            <span
+              v-if="hasNight"
+              class="night-time editable"
+              @click.stop="startEditTime('night')"
+            >+{{ nightTime }}</span>
+          </span>
         </span>
         <span v-if="timePct !== null" class="pct-cell time-pct">{{ timePct }}%</span>
         <!-- Limit cell: planned mode only -->
@@ -359,9 +393,9 @@ function onNameMounted(el: HTMLInputElement | null) {
         <!-- Timer buttons: planned mode only -->
         <span class="timer-btns">
           <template v-if="!isCommitted && isLeaf && tracker.isToday.value">
-            <button v-if="!running" class="btn btn-switch" @click="tracker.openPip().then(() => tracker.switchTimer(node.id))" title="Switch"></button>
+            <button v-if="!running" class="btn btn-switch" :class="{ 'btn-night': isAfterEod }" @click="tracker.openPip().then(() => tracker.switchTimer(node.id))" title="Switch"></button>
             <button v-if="running" class="btn btn-stop" @click="tracker.stopTimer(node.id)" title="Stop"></button>
-            <button v-if="!running" class="btn btn-share" @click="tracker.openPip().then(() => tracker.shareTimer(node.id))" title="Share"></button>
+            <button v-if="!running" class="btn btn-share" :class="{ 'btn-night': isAfterEod }" @click="tracker.openPip().then(() => tracker.shareTimer(node.id))" title="Share"></button>
           </template>
         </span>
         <span class="struct-btns">
@@ -565,6 +599,24 @@ ul { margin: 0; padding: 0; }
 .btn-switch::before { content: '\25B6'; color: #2e7d32; font-size: 10px; }
 .btn-stop::before   { content: '\25A0'; color: #c62828; font-size: 12px; }
 .btn-share::before  { content: '+'; color: #1565c0; font-size: 15px; font-weight: 700; }
+
+/* Night mode: blue timer buttons */
+.btn-switch.btn-night::before { color: #1565c0; }
+.btn-share.btn-night::before  { color: #1a56a0; }
+
+/* Night time display */
+.night-time {
+  display: block;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 10px;
+  color: #1565c0;
+  text-align: right;
+  line-height: 1.2;
+}
+.night-time.editable {
+  cursor: pointer;
+  text-decoration: underline dotted #7baad4;
+}
 
 .btn-struct { color: #aaa; }
 .btn-add-child::before   { content: '\21B3'; font-size: 14px; }
