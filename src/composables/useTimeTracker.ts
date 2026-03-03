@@ -401,6 +401,16 @@ export function useTimeTracker(): TimeTracker {
     persistDayState()
   }
 
+  function setCompleted(nodeId: string, completed: boolean) {
+    const node = findNode(tree.value.roots, nodeId)
+    if (!node || !isLeaf(node)) return
+    if (completed && isRunning(nodeId)) {
+      stopTimer(nodeId)
+    }
+    node.completed = completed
+    persistTree()
+  }
+
   // --- Display helpers ---
   const now = ref(Date.now())
 
@@ -828,6 +838,7 @@ export function useTimeTracker(): TimeTracker {
     stopAll,
     setAccumulatedMs,
     setNightAccumulatedMs,
+    setCompleted,
     getDisplayMs,
     getDayDisplayMs,
     getNightDisplayMs,

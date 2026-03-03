@@ -89,6 +89,18 @@ const effectiveEndMinutes = computed(() => {
 
     <!-- Permanent buffer item: planned mode + planning enabled -->
     <BufferItem v-if="!isCommitted && planning?.planningEnabled.value" />
+
+    <!-- Overcommit row: shown when non-zero -->
+    <div
+      v-if="!isCommitted && planning?.planningEnabled.value && planning.overcommitMs.value !== 0"
+      class="overcommit-row"
+    >
+      <span class="oc-label">Overcommit</span>
+      <span
+        class="oc-value"
+        :style="{ color: planning.overcommitMs.value > 0 ? '#c62828' : '#2e7d32' }"
+      >{{ planning.overcommitMs.value > 0 ? '+' : '−' }}{{ formatMsHM(Math.abs(planning.overcommitMs.value)) }}</span>
+    </div>
   </div>
 </template>
 
@@ -150,5 +162,22 @@ const effectiveEndMinutes = computed(() => {
 }
 .ph-sep {
   color: #ddd;
+}
+
+/* Overcommit row */
+.overcommit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 28px;
+  font-size: 12px;
+}
+.oc-label {
+  color: #bbb;
+  font-style: italic;
+}
+.oc-value {
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-weight: 600;
 }
 </style>

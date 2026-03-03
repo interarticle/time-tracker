@@ -5,6 +5,7 @@ export interface TaskNode {
   name: string
   children: TaskNode[]
   timeLimitMs: number | null
+  completed?: boolean
 }
 
 export interface TaskTreeData {
@@ -78,6 +79,7 @@ export interface TimeTracker {
   stopAll: () => void
   setAccumulatedMs: (id: string, ms: number) => void
   setNightAccumulatedMs: (id: string, ms: number) => void
+  setCompleted: (nodeId: string, completed: boolean) => void
 
   // Display helpers
   getDisplayMs: (id: string) => number
@@ -146,6 +148,8 @@ export interface Planning {
   // EOD
   absoluteEffectiveEndMs: ComputedRef<number | null>
   timeToEodMs: ComputedRef<number | null>
+  // Overcommit
+  overcommitMs: ComputedRef<number>
 }
 
 export const PlanningKey: InjectionKey<Planning> = Symbol('Planning')

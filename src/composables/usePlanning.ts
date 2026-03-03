@@ -1,6 +1,6 @@
 import { ref, computed, watch } from 'vue'
 import type { Ref } from 'vue'
-import type { CommittedNode, CommittedTreeData, Planning, TimeTracker } from '@/types'
+import type { CommittedNode, CommittedTreeData, Planning, TaskNode, TimeTracker } from '@/types'
 import {
   loadPlanningSettings,
   savePlanningSettings,
@@ -361,6 +361,30 @@ export function usePlanning(currentDateKey: Ref<string>, tracker: TimeTracker): 
     return nowFromMidnight > startMs && nowFromMidnight < startMs + totalLimitMs
   })
 
+  // --- Overcommit ---
+  const overcommitMs = computed(() => {
+    let total = 0
+    function walkNode(node: TaskNode) {
+      if (node.children.length > 0) {
+        node.children.forEach(walkNode)
+        return
+      }
+      const consumed = tracker.getDayDisplayMs(node.id)
+      const limit = node.timeLimitMs
+      if (limit !== null) {
+        total += (node.completed ?? false) ? consumed - limit : Math.max(0, consumed - limit)
+      } else {
+        total += consumed
+      }
+    }
+    tracker.tree.value.roots.forEach(walkNode)
+    const bufLim = bufferLimitMs.value
+    if (bufLim !== undefined) {
+      total += Math.max(0, bufferAccumulatedMs.value - bufLim)
+    }
+    return total
+  })
+
   return {
     planningEnabled,
     setPlanningEnabled,
@@ -388,5 +412,6 @@ export function usePlanning(currentDateKey: Ref<string>, tracker: TimeTracker): 
     bufferIsLive,
     absoluteEffectiveEndMs,
     timeToEodMs,
+    overcommitMs,
   }
 }

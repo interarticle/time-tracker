@@ -13,6 +13,13 @@ const planning = inject(PlanningKey, null)
 
 const isCommitted = computed(() => props.mode === 'committed')
 const isLeaf = computed(() => props.node.children.length === 0)
+const isCompleted = computed(() =>
+  !isCommitted.value && isLeaf.value && !!((props.node as TaskNode).completed),
+)
+function toggleComplete() {
+  if (isCommitted.value || !isLeaf.value) return
+  tracker.setCompleted(props.node.id, !isCompleted.value)
+}
 
 const running = computed(() => !isCommitted.value && tracker.isRunning(props.node.id))
 const isAfterEod = computed(() => tracker.isAfterEod.value)
@@ -73,6 +80,7 @@ const limitPct = computed(() => {
 
 const rowClasses = computed(() => {
   if (isCommitted.value) return {}
+  if (isCompleted.value) return { 'is-completed': true }
   const c: Record<string, boolean> = {}
   if (running.value) c['is-running'] = true
   if (limitRatio.value !== null) {
@@ -238,6 +246,7 @@ const editingWhich = ref<'day' | 'night'>('day')
 const timeInput = ref('')
 
 function startEditTime(which: 'day' | 'night' = 'day') {
+  if (!isCommitted.value && isCompleted.value) return
   if (isCommitted.value) {
     if (!isLeaf.value) return
     editingTime.value = true
@@ -274,7 +283,7 @@ function commitTime() {
 const editingLimit = ref(false)
 const limitInput = ref('')
 function startEditLimit() {
-  if (isCommitted.value || !isLeaf.value) return
+  if (isCommitted.value || !isLeaf.value || isCompleted.value) return
   editingLimit.value = true
   limitInput.value = timeLimitMs.value !== null ? formatMs(timeLimitMs.value) : ''
 }
@@ -323,7 +332,13 @@ function onNameMounted(el: HTMLInputElement | null) {
       <!-- Left: tree-indented name -->
       <span class="row-left">
         <span class="indent" :style="{ width: depth * 20 + 'px' }" aria-hidden="true"></span>
-        <span class="node-icon" aria-hidden="true">{{ isLeaf ? '\u2022' : '\u25BE' }}</span>
+        <span
+          v-if="isLeaf && !isCommitted"
+          :class="['node-icon', 'node-icon-checkable', { 'is-checked': isCompleted }]"
+          @click="toggleComplete"
+          aria-hidden="true"
+        ></span>
+        <span v-else class="node-icon" aria-hidden="true">{{ isLeaf ? '\u2022' : '\u25BE' }}</span>
         <input
           v-if="editingName || !node.name"
           :ref="(el) => onNameMounted(el as HTMLInputElement | null)"
@@ -378,7 +393,7 @@ function onNameMounted(el: HTMLInputElement | null) {
             />
             <template v-else>
               <PieChart v-if="limitRatio !== null" :ratio="limitRatio" />
-              <span v-if="timeLimitMs !== null" class="limit-text" @click="startEditLimit">/{{ formatMs(timeLimitMs ?? 0) }}</span>
+              <span v-if="timeLimitMs !== null" :class="['limit-text', { 'is-crossed': isCompleted }]" @click="startEditLimit">/{{ formatMs(timeLimitMs ?? 0) }}</span>
               <span v-else class="limit-set" @click="startEditLimit"></span>
             </template>
           </template>
@@ -392,7 +407,7 @@ function onNameMounted(el: HTMLInputElement | null) {
         <span class="reverse-indent" :style="{ width: Math.max(0, 4 - depth) * 20 + 'px' }"></span>
         <!-- Timer buttons: planned mode only -->
         <span class="timer-btns">
-          <template v-if="!isCommitted && isLeaf && tracker.isToday.value">
+          <template v-if="!isCommitted && isLeaf && tracker.isToday.value && !isCompleted">
             <button v-if="!running" class="btn btn-switch" :class="{ 'btn-night': isAfterEod }" @click="tracker.openPip().then(() => tracker.switchTimer(node.id))" title="Switch"></button>
             <button v-if="running" class="btn btn-stop" @click="tracker.stopTimer(node.id)" title="Stop"></button>
             <button v-if="!running" class="btn btn-share" :class="{ 'btn-night': isAfterEod }" @click="tracker.openPip().then(() => tracker.shareTimer(node.id))" title="Share"></button>
@@ -624,4 +639,15 @@ ul { margin: 0; padding: 0; }
 .btn-delete::before      { content: '\00D7'; font-size: 16px; }
 .btn-struct:hover { color: #555; }
 .btn-delete:hover { color: #c62828 !important; }
+
+/* Completed state */
+.task-row.is-completed { opacity: 0.7; }
+.task-row.is-completed .name-text { text-decoration: line-through; }
+.limit-text.is-crossed { text-decoration: line-through; }
+
+/* Checkable leaf icon */
+.node-icon-checkable { cursor: pointer; }
+.node-icon-checkable::before { content: '\2022'; color: #aaa; font-size: 11px; }
+.task-row:hover .node-icon-checkable:not(.is-checked)::before { content: '\25CB'; }
+.node-icon-checkable.is-checked::before { content: '\2713'; color: #4caf50; }
 </style>
