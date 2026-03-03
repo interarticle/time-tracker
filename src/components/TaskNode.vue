@@ -16,6 +16,9 @@ const isLeaf = computed(() => props.node.children.length === 0)
 const isCompleted = computed(() =>
   !isCommitted.value && isLeaf.value && !!((props.node as TaskNode).completed),
 )
+const showLimitStrikethrough = computed(() =>
+  isCompleted.value && timeLimitMs.value !== null && displayMs.value < timeLimitMs.value,
+)
 function toggleComplete() {
   if (isCommitted.value || !isLeaf.value) return
   tracker.setCompleted(props.node.id, !isCompleted.value)
@@ -80,8 +83,15 @@ const limitPct = computed(() => {
 
 const rowClasses = computed(() => {
   if (isCommitted.value) return {}
-  if (isCompleted.value) return { 'is-completed': true }
   const c: Record<string, boolean> = {}
+  if (isCompleted.value) {
+    c['is-completed'] = true
+    // Overtime items keep their red; warning items lose their yellow
+    if (limitRatio.value !== null && limitRatio.value >= 1) {
+      c['limit-exceeded'] = true
+    }
+    return c
+  }
   if (running.value) c['is-running'] = true
   if (limitRatio.value !== null) {
     if (limitRatio.value >= 1) {
@@ -332,13 +342,7 @@ function onNameMounted(el: HTMLInputElement | null) {
       <!-- Left: tree-indented name -->
       <span class="row-left">
         <span class="indent" :style="{ width: depth * 20 + 'px' }" aria-hidden="true"></span>
-        <span
-          v-if="isLeaf && !isCommitted"
-          :class="['node-icon', 'node-icon-checkable', { 'is-checked': isCompleted }]"
-          @click="toggleComplete"
-          aria-hidden="true"
-        ></span>
-        <span v-else class="node-icon" aria-hidden="true">{{ isLeaf ? '\u2022' : '\u25BE' }}</span>
+        <span class="node-icon" aria-hidden="true">{{ isLeaf ? '\u2022' : '\u25BE' }}</span>
         <input
           v-if="editingName || !node.name"
           :ref="(el) => onNameMounted(el as HTMLInputElement | null)"
@@ -393,7 +397,7 @@ function onNameMounted(el: HTMLInputElement | null) {
             />
             <template v-else>
               <PieChart v-if="limitRatio !== null" :ratio="limitRatio" />
-              <span v-if="timeLimitMs !== null" :class="['limit-text', { 'is-crossed': isCompleted }]" @click="startEditLimit">/{{ formatMs(timeLimitMs ?? 0) }}</span>
+              <span v-if="timeLimitMs !== null" :class="['limit-text', { 'is-crossed': showLimitStrikethrough }]" @click="startEditLimit">/{{ formatMs(timeLimitMs ?? 0) }}</span>
               <span v-else class="limit-set" @click="startEditLimit"></span>
             </template>
           </template>
@@ -417,6 +421,15 @@ function onNameMounted(el: HTMLInputElement | null) {
           <button class="btn btn-struct btn-add-child" @click="doAddChild" title="Add child"></button>
           <button class="btn btn-struct btn-add-sibling" @click="doAddSibling" title="Add sibling"></button>
           <button class="btn btn-struct btn-delete" @click="handleDelete" title="Delete"></button>
+        </span>
+        <!-- Complete toggle: planned leaves only; spacer for others -->
+        <span class="complete-cell">
+          <button
+            v-if="!isCommitted && isLeaf"
+            :class="['btn', 'btn-complete', { 'is-checked': isCompleted }]"
+            @click="toggleComplete"
+            :title="isCompleted ? 'Mark incomplete' : 'Mark complete'"
+          ></button>
         </span>
       </span>
     </div>
@@ -642,12 +655,26 @@ ul { margin: 0; padding: 0; }
 
 /* Completed state */
 .task-row.is-completed { opacity: 0.7; }
+.task-row.is-completed.limit-exceeded { opacity: 1; }
 .task-row.is-completed .name-text { text-decoration: line-through; }
 .limit-text.is-crossed { text-decoration: line-through; }
 
-/* Checkable leaf icon */
-.node-icon-checkable { cursor: pointer; }
-.node-icon-checkable::before { content: '\2022'; color: #aaa; font-size: 11px; }
-.task-row:hover .node-icon-checkable:not(.is-checked)::before { content: '\25CB'; }
-.node-icon-checkable.is-checked::before { content: '\2713'; color: #4caf50; }
+/* Complete toggle button */
+.complete-cell {
+  width: 23px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.btn-complete {
+  opacity: 0;
+  transition: opacity 0.12s;
+  width: 20px;
+  height: 20px;
+}
+.task-row:hover .btn-complete { opacity: 0.45; }
+.btn-complete.is-checked { opacity: 1 !important; }
+.btn-complete::before { content: '\2610'; font-size: 14px; color: #aaa; }
+.btn-complete.is-checked::before { content: '\2611'; color: #4caf50; }
 </style>
