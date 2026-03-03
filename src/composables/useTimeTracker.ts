@@ -401,6 +401,12 @@ export function useTimeTracker(): TimeTracker {
     persistDayState()
   }
 
+  // --- PiP overcommit sync ---
+  const pipOvercommitMs = ref(0)
+  function setOvercommitForPip(ms: number) {
+    pipOvercommitMs.value = ms
+  }
+
   function setCompleted(nodeId: string, completed: boolean) {
     const node = findNode(tree.value.roots, nodeId)
     if (!node || !isLeaf(node)) return
@@ -679,7 +685,7 @@ export function useTimeTracker(): TimeTracker {
     style.textContent = `
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fff; color: #222; padding: 10px; font-size: 13px; height: 100vh; display: flex; flex-direction: column; gap: 8px; }
-      #pip-tasks { flex: 1; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+      #pip-tasks { flex: 1; display: flex; flex-direction: column; gap: 4px; }
       .pip-task { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 5px; background: #f5f5f5; }
       .pip-task.is-warning { background: #fff8e1; animation: pw 1.5s ease-in-out infinite; }
       .pip-task.is-exceeded { background: #ffebee; animation: pd 1s ease-in-out infinite; }
@@ -750,6 +756,22 @@ export function useTimeTracker(): TimeTracker {
       (row.querySelector('.pip-time') as HTMLElement).textContent = formatMs(ms);
       (row.querySelector('.pip-pie') as HTMLElement).innerHTML = limit !== null && limit > 0 ? pieSvgHtml(ms / limit) : '';
       (row.querySelector('.pip-limit') as HTMLElement).textContent = limit !== null ? '/' + formatMs(limit) : ''
+    }
+
+    // Overcommit: sibling after #pip-tasks, flex-shrink:0 so it's never clipped
+    const oc = pipOvercommitMs.value
+    let overcommitEl = doc.getElementById('pip-overcommit') as HTMLElement | null
+    if (oc !== 0) {
+      if (!overcommitEl) {
+        overcommitEl = doc.createElement('div')
+        overcommitEl.id = 'pip-overcommit'
+        overcommitEl.style.cssText = 'font-family:monospace;font-size:11px;font-weight:600;flex-shrink:0;padding:0;'
+      }
+      overcommitEl.textContent = `Overcommit: ${oc > 0 ? '+' : '−'}${formatMs(Math.abs(oc))}`
+      overcommitEl.style.color = oc > 0 ? '#c62828' : '#2e7d32'
+      tasksEl.appendChild(overcommitEl)
+    } else if (overcommitEl) {
+      overcommitEl.remove()
     }
 
     const eodEl = doc.getElementById('pip-eod')
@@ -839,6 +861,7 @@ export function useTimeTracker(): TimeTracker {
     setAccumulatedMs,
     setNightAccumulatedMs,
     setCompleted,
+    setOvercommitForPip,
     getDisplayMs,
     getDayDisplayMs,
     getNightDisplayMs,

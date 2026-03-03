@@ -58,6 +58,13 @@ watch(
   },
 )
 
+// Sync overcommit to PiP
+watch(
+  () => planning.planningEnabled.value ? planning.overcommitMs.value : 0,
+  (ms) => tracker.setOvercommitForPip(ms),
+  { immediate: true },
+)
+
 // Retroactive stop on page load
 onMounted(() => {
   const eodMs = planning.absoluteEffectiveEndMs.value

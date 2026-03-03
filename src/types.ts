@@ -80,6 +80,7 @@ export interface TimeTracker {
   setAccumulatedMs: (id: string, ms: number) => void
   setNightAccumulatedMs: (id: string, ms: number) => void
   setCompleted: (nodeId: string, completed: boolean) => void
+  setOvercommitForPip: (ms: number) => void
 
   // Display helpers
   getDisplayMs: (id: string) => number
