@@ -9,6 +9,7 @@ import TaskTree from '@/components/TaskTree.vue'
 import CommittedSection from '@/components/CommittedSection.vue'
 import PlanningInfoBar from '@/components/PlanningInfoBar.vue'
 import CategoryBreakdown from '@/components/CategoryBreakdown.vue'
+import CopyOverlay from '@/components/CopyOverlay.vue'
 
 const tracker = useTimeTracker()
 const planning = usePlanning(tracker.currentDateKey, tracker)
@@ -84,6 +85,9 @@ const totalDayLimitMs = computed(() => {
   }
   return tracker.getTotalDayLimitMs()
 })
+
+// --- Copy overlay ---
+const showCopyOverlay = ref(false)
 
 // --- Help dialog ---
 const showHelpDialog = ref(false)
@@ -173,6 +177,7 @@ function disablePlanningAndClose() {
           :class="{ 'sigma-active': planning.planningEnabled.value }"
           @click="openPlanningDialog"
         >Σ</button>
+        <button class="icon-btn" @click="showCopyOverlay = true" title="Copy as Markdown">&#x1F4CB;</button>
         <button class="icon-btn" @click="showHelpDialog = true" title="Help">?</button>
         <button class="icon-btn" @click="openDataDialog" title="Import / Export">&#x1F4BE;</button>
         <button class="icon-btn" @click="tracker.sendTestNotification()" title="Test notifications">&#x1F514;</button>
@@ -323,6 +328,9 @@ function disablePlanningAndClose() {
       </div>
     </div>
   </Teleport>
+
+  <!-- Copy overlay -->
+  <CopyOverlay v-if="showCopyOverlay" @close="showCopyOverlay = false" />
 
   <!-- Data dialog -->
   <Teleport to="body">
