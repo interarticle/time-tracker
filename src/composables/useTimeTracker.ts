@@ -1,6 +1,6 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import type { TaskNode, TaskTreeData, DayTimerState, TimeTracker } from '@/types'
-import { todayKey, addDays, formatDateDisplay, formatMs } from '@/utils/format'
+import { todayKey, addDays, formatDateDisplay, formatMs, formatCountdown } from '@/utils/format'
 import { loadTree, saveTree, loadDayState, saveDayState, saveMeta } from '@/utils/storage'
 
 let idCounter = Date.now()
@@ -662,20 +662,31 @@ export function useTimeTracker(): TimeTracker {
     })
   }
 
-  function pieSvgHtml(ratio: number, size = 14): string {
+  function clockFaceSvgHtml(ms: number, size = 36): string {
     const r = size / 2 - 1, cx = size / 2, cy = size / 2
-    function arcPath(frac: number): string {
-      const a = frac * 2 * Math.PI
-      const x = (cx + r * Math.sin(a)).toFixed(3)
-      const y = (cy - r * Math.cos(a)).toFixed(3)
-      return `M${cx},${cy} L${cx},${cy - r} A${r},${r} 0 ${frac > 0.5 ? 1 : 0},1 ${x},${y}Z`
+    const totalMin = Math.abs(ms) / 60000
+    const minAngle = (totalMin % 60) / 60 * 360 * Math.PI / 180
+    const hourAngle = (totalMin / 60 % 12) / 12 * 360 * Math.PI / 180
+    const tickLen = size * 0.18
+    const tsw = size > 20 ? 1 : 0.75
+    const hsw = size > 20 ? 2.5 : 1.5
+    const msw = size > 20 ? 1.5 : 1
+    const dotR = size > 20 ? 2 : 1
+
+    let inner = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#f0f0f0" stroke="#ccc" stroke-width="${tsw}"/>`
+    // Tick marks at 12, 3, 6, 9
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2
+      inner += `<line x1="${(cx + r * Math.sin(a)).toFixed(3)}" y1="${(cy - r * Math.cos(a)).toFixed(3)}" x2="${(cx + (r - tickLen) * Math.sin(a)).toFixed(3)}" y2="${(cy - (r - tickLen) * Math.cos(a)).toFixed(3)}" stroke="#999" stroke-width="${tsw}" stroke-linecap="round"/>`
     }
-    const main = Math.min(ratio, 1), over = ratio - 1
-    let inner = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#ddd"/>`
-    if (main >= 1) inner += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#4a90d9"/>`
-    else if (main > 0) inner += `<path d="${arcPath(main)}" fill="#4a90d9"/>`
-    if (over >= 1) inner += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#e53935"/>`
-    else if (over > 0) inner += `<path d="${arcPath(over)}" fill="#e53935"/>`
+    // Hour hand
+    const hLen = r * 0.48
+    inner += `<line x1="${cx}" y1="${cy}" x2="${(cx + hLen * Math.sin(hourAngle)).toFixed(3)}" y2="${(cy - hLen * Math.cos(hourAngle)).toFixed(3)}" stroke="#333" stroke-width="${hsw}" stroke-linecap="round"/>`
+    // Minute hand
+    const mLen = r * 0.72
+    inner += `<line x1="${cx}" y1="${cy}" x2="${(cx + mLen * Math.sin(minAngle)).toFixed(3)}" y2="${(cy - mLen * Math.cos(minAngle)).toFixed(3)}" stroke="#333" stroke-width="${msw}" stroke-linecap="round"/>`
+    // Center dot
+    inner += `<circle cx="${cx}" cy="${cy}" r="${dotR}" fill="#333"/>`
     return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink:0">${inner}</svg>`
   }
 
@@ -691,7 +702,7 @@ export function useTimeTracker(): TimeTracker {
       .pip-task.is-exceeded { background: #ffebee; animation: pd 1s ease-in-out infinite; }
       .pip-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .pip-time { font-family: monospace; font-size: 13px; color: #333; flex-shrink: 0; }
-      .pip-pie { flex-shrink: 0; display: flex; align-items: center; }
+      .pip-pie { flex-shrink: 0; display: flex; align-items: center; gap: 3px; }
       .pip-limit { font-family: monospace; font-size: 12px; color: #999; flex-shrink: 0; }
       #pip-eod { font-size: 11px; text-align: center; padding: 2px 0; flex-shrink: 0; min-height: 14px; }
       #pip-stop { background: #c62828; color: #fff; border: none; border-radius: 4px; padding: 6px; cursor: pointer; font-size: 12px; font-weight: 500; width: 100%; flex-shrink: 0; }
@@ -754,8 +765,18 @@ export function useTimeTracker(): TimeTracker {
       row.className = cls;
       (row.querySelector('.pip-name') as HTMLElement).textContent = node.name;
       (row.querySelector('.pip-time') as HTMLElement).textContent = formatMs(ms);
-      (row.querySelector('.pip-pie') as HTMLElement).innerHTML = limit !== null && limit > 0 ? pieSvgHtml(ms / limit) : '';
-      (row.querySelector('.pip-limit') as HTMLElement).textContent = limit !== null ? '/' + formatMs(limit) : ''
+      (row.querySelector('.pip-pie') as HTMLElement).innerHTML = limit !== null && limit > 0
+        ? clockFaceSvgHtml(ms, 36) + clockFaceSvgHtml(limit, 36)
+        : ''
+      const limitEl = row.querySelector('.pip-limit') as HTMLElement
+      if (limit !== null && limit > 0) {
+        const remaining = limit - ms
+        limitEl.textContent = formatCountdown(remaining)
+        limitEl.style.color = remaining >= 0 ? '#2e7d32' : '#c62828'
+        limitEl.style.fontWeight = '600'
+      } else {
+        limitEl.textContent = ''
+      }
     }
 
     // Overcommit: sibling after #pip-tasks, flex-shrink:0 so it's never clipped

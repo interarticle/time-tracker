@@ -1,3 +1,9 @@
+/** Format a countdown: positive = remaining, negative = over (prefixed with -). */
+export function formatCountdown(remainingMs: number): string {
+  const prefix = remainingMs < 0 ? '-' : ''
+  return prefix + formatMs(Math.abs(remainingMs))
+}
+
 export function formatMs(ms: number): string {
   const totalSeconds = Math.floor(Math.abs(ms) / 1000)
   const hours = Math.floor(totalSeconds / 3600)

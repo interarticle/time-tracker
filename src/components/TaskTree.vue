@@ -4,6 +4,7 @@ import { TimeTrackerKey, PlanningKey } from '@/types'
 import type { CommittedNode, TaskNode as TaskNodeData } from '@/types'
 import TaskNode from './TaskNode.vue'
 import BufferItem from './BufferItem.vue'
+import ClockFace from './ClockFace.vue'
 import { formatMsHM, formatMinutes } from '@/utils/format'
 
 const props = defineProps<{ mode?: 'planned' | 'committed' }>()
@@ -100,6 +101,7 @@ const effectiveEndMinutes = computed(() => {
         class="oc-value"
         :style="{ color: planning.overcommitMs.value > 0 ? '#c62828' : '#2e7d32' }"
       >{{ planning.overcommitMs.value > 0 ? '+' : '−' }}{{ formatMsHM(Math.abs(planning.overcommitMs.value)) }}</span>
+      <ClockFace v-if="planning.overcommitMs.value > 0" :ms="planning.overcommitMs.value" :size="16" class="oc-clock" />
     </div>
   </div>
 </template>
@@ -179,5 +181,9 @@ const effectiveEndMinutes = computed(() => {
 .oc-value {
   font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
   font-weight: 600;
+}
+.oc-clock {
+  flex-shrink: 0;
+  margin-left: 2px;
 }
 </style>

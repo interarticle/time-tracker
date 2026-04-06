@@ -2,8 +2,8 @@
 import { inject, ref, computed, watch, nextTick } from 'vue'
 import { TimeTrackerKey, PlanningKey } from '@/types'
 import type { TaskNode, CommittedNode } from '@/types'
-import { formatMs, parseTimeInput } from '@/utils/format'
-import PieChart from './PieChart.vue'
+import { formatMs, formatCountdown, parseTimeInput } from '@/utils/format'
+import ClockFace from './ClockFace.vue'
 
 type AnyNode = TaskNode | CommittedNode
 
@@ -80,6 +80,12 @@ const limitPct = computed(() => {
   if (totalLimit === null || totalLimit <= 0 || subtreeLimitMs.value === null) return null
   return Math.round((subtreeLimitMs.value / totalLimit) * 100)
 })
+
+// Countdown: shown only while running with a limit
+const showCountdown = computed(() => running.value && isLeaf.value && timeLimitMs.value !== null && timeLimitMs.value > 0)
+const countdownMs = computed(() => (timeLimitMs.value ?? 0) - displayMs.value)
+const countdownText = computed(() => formatCountdown(countdownMs.value))
+const countdownColor = computed(() => countdownMs.value >= 0 ? '#2e7d32' : '#c62828')
 
 const rowClasses = computed(() => {
   if (isCommitted.value) return {}
@@ -381,6 +387,8 @@ function onNameMounted(el: HTMLInputElement | null) {
             >+{{ nightTime }}</span>
           </span>
         </span>
+        <!-- Used-time clock face -->
+        <ClockFace v-if="!isCommitted && subtreeLimitMs !== null" :ms="displayMs" :size="16" class="clock-used" />
         <span v-if="timePct !== null" class="pct-cell time-pct">{{ timePct }}%</span>
         <!-- Limit cell: planned mode only -->
         <span v-if="!isCommitted" class="limit-cell">
@@ -395,17 +403,20 @@ function onNameMounted(el: HTMLInputElement | null) {
               @keydown.escape="editingLimit = false"
               @vue:mounted="($event: any) => $event.el.focus()"
             />
+            <template v-else-if="showCountdown">
+              <span class="countdown-text" :style="{ color: countdownColor }">{{ countdownText }}</span>
+            </template>
             <template v-else>
-              <PieChart v-if="limitRatio !== null" :ratio="limitRatio" />
               <span v-if="timeLimitMs !== null" :class="['limit-text', { 'is-crossed': showLimitStrikethrough }]" @click="startEditLimit">/{{ formatMs(timeLimitMs ?? 0) }}</span>
               <span v-else class="limit-set" @click="startEditLimit"></span>
             </template>
           </template>
           <template v-else-if="subtreeLimitMs !== null">
-            <PieChart v-if="limitRatio !== null" :ratio="limitRatio" />
             <span class="limit-text">/{{ formatMs(subtreeLimitMs) }}</span>
           </template>
         </span>
+        <!-- Limit clock face (after limit numbers) -->
+        <ClockFace v-if="!isCommitted && subtreeLimitMs !== null" :ms="subtreeLimitMs" :size="16" class="clock-limit" />
         <span v-if="limitPct !== null" class="pct-cell limit-pct">{{ limitPct }}%</span>
         <!-- Reverse indent: shallower = wider gap, deeper = narrower (flush with controls) -->
         <span class="reverse-indent" :style="{ width: Math.max(0, 4 - depth) * 20 + 'px' }"></span>
@@ -533,13 +544,12 @@ ul { margin: 0; padding: 0; }
   text-align: right;
 }
 .limit-cell {
-  width: 92px;
+  width: 74px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 3px;
-  margin-left: 2px;
 }
 .time-text, .limit-text {
   font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
@@ -553,6 +563,15 @@ ul { margin: 0; padding: 0; }
 .limit-text {
   color: #888;
   cursor: pointer;
+}
+.clock-used, .clock-limit {
+  flex-shrink: 0;
+  margin-left: 3px;
+}
+.countdown-text {
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 13px;
+  font-weight: 600;
 }
 .limit-set {
   display: inline-block;

@@ -2,7 +2,7 @@
 import { inject, ref, computed } from 'vue'
 import { TimeTrackerKey, PlanningKey, BUFFER_NAME } from '@/types'
 import { formatMs, parseTimeInput } from '@/utils/format'
-import PieChart from './PieChart.vue'
+import ClockFace from './ClockFace.vue'
 
 const tracker = inject(TimeTrackerKey)!
 const planning = inject(PlanningKey)!
@@ -13,12 +13,6 @@ const displayTime = computed(() => {
   const ms = bufferMs.value
   if (ms < 0) return '−' + formatMs(-ms)
   return formatMs(ms)
-})
-
-const limitRatio = computed(() => {
-  const lim = planning.bufferLimitMs.value
-  if (!lim) return null
-  return bufferMs.value / lim
 })
 
 // Limit editing
@@ -64,6 +58,7 @@ const otherRunning = computed(() => tracker.dayState.value.runningTimerIds.lengt
       <span class="time-cell">
         <span class="time-text" :class="{ negative: bufferMs < 0 }">{{ displayTime }}</span>
       </span>
+      <ClockFace v-if="planning.bufferLimitMs.value !== undefined" :ms="bufferMs < 0 ? 0 : bufferMs" :size="16" class="clock-used" />
       <span class="limit-cell">
         <input
           v-if="editingLimit"
@@ -76,7 +71,6 @@ const otherRunning = computed(() => tracker.dayState.value.runningTimerIds.lengt
           @vue:mounted="($event: any) => $event.el.focus()"
         />
         <template v-else>
-          <PieChart v-if="limitRatio !== null" :ratio="limitRatio" />
           <span
             v-if="planning.bufferLimitMs.value !== undefined"
             class="limit-text"
@@ -85,6 +79,7 @@ const otherRunning = computed(() => tracker.dayState.value.runningTimerIds.lengt
           <span v-else class="limit-set" @click="startEditLimit"></span>
         </template>
       </span>
+      <ClockFace v-if="planning.bufferLimitMs.value !== undefined" :ms="planning.bufferLimitMs.value" :size="16" class="clock-limit" />
       <!-- Spacers to match depth-0 TaskNode layout (reverse-indent + timer-btns + struct-btns) -->
       <span class="spacer"></span>
     </span>
@@ -150,13 +145,16 @@ const otherRunning = computed(() => tracker.dayState.value.runningTimerIds.lengt
 .time-text.negative { color: #c62828; }
 
 .limit-cell {
-  width: 92px;
+  width: 74px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 3px;
-  margin-left: 2px;
+}
+.clock-used, .clock-limit {
+  flex-shrink: 0;
+  margin-left: 3px;
 }
 .limit-text {
   font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
