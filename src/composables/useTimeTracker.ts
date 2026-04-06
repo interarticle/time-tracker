@@ -665,27 +665,27 @@ export function useTimeTracker(): TimeTracker {
   function clockFaceSvgHtml(ms: number, size = 36): string {
     const r = size / 2 - 1, cx = size / 2, cy = size / 2
     const totalMin = Math.abs(ms) / 60000
-    const minAngle = (totalMin % 60) / 60 * 360 * Math.PI / 180
-    const hourAngle = (totalMin / 60 % 12) / 12 * 360 * Math.PI / 180
     const tickLen = size * 0.18
     const tsw = size > 20 ? 1 : 0.75
-    const hsw = size > 20 ? 2.5 : 1.5
-    const msw = size > 20 ? 1.5 : 1
+    const sw = size > 20 ? 2 : 1.5
     const dotR = size > 20 ? 2 : 1
 
     let inner = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#f0f0f0" stroke="#ccc" stroke-width="${tsw}"/>`
-    // Tick marks at 12, 3, 6, 9
     for (let i = 0; i < 4; i++) {
       const a = i * Math.PI / 2
       inner += `<line x1="${(cx + r * Math.sin(a)).toFixed(3)}" y1="${(cy - r * Math.cos(a)).toFixed(3)}" x2="${(cx + (r - tickLen) * Math.sin(a)).toFixed(3)}" y2="${(cy - (r - tickLen) * Math.cos(a)).toFixed(3)}" stroke="#999" stroke-width="${tsw}" stroke-linecap="round"/>`
     }
-    // Hour hand
-    const hLen = r * 0.48
-    inner += `<line x1="${cx}" y1="${cy}" x2="${(cx + hLen * Math.sin(hourAngle)).toFixed(3)}" y2="${(cy - hLen * Math.cos(hourAngle)).toFixed(3)}" stroke="#333" stroke-width="${hsw}" stroke-linecap="round"/>`
-    // Minute hand
+    const minAngle = (totalMin % 60) / 60 * 360 * Math.PI / 180
     const mLen = r * 0.72
-    inner += `<line x1="${cx}" y1="${cy}" x2="${(cx + mLen * Math.sin(minAngle)).toFixed(3)}" y2="${(cy - mLen * Math.cos(minAngle)).toFixed(3)}" stroke="#333" stroke-width="${msw}" stroke-linecap="round"/>`
-    // Center dot
+    // Hour hand: only >= 1h
+    if (totalMin >= 60) {
+      const hourAngle = (totalMin / 60 % 12) / 12 * 360 * Math.PI / 180
+      const hLen = r * 0.48
+      const hsw = size > 20 ? 2.5 : 1.5
+      inner += `<line x1="${cx}" y1="${cy}" x2="${(cx + hLen * Math.sin(hourAngle)).toFixed(3)}" y2="${(cy - hLen * Math.cos(hourAngle)).toFixed(3)}" stroke="#333" stroke-width="${hsw}" stroke-linecap="round"/>`
+    }
+    // Minute hand: always
+    inner += `<line x1="${cx}" y1="${cy}" x2="${(cx + mLen * Math.sin(minAngle)).toFixed(3)}" y2="${(cy - mLen * Math.cos(minAngle)).toFixed(3)}" stroke="#333" stroke-width="${sw}" stroke-linecap="round"/>`
     inner += `<circle cx="${cx}" cy="${cy}" r="${dotR}" fill="#333"/>`
     return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink:0">${inner}</svg>`
   }

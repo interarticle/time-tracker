@@ -7,7 +7,6 @@ const cx = computed(() => props.size / 2)
 const cy = computed(() => props.size / 2)
 const r = computed(() => props.size / 2 - 1)
 
-// Tick marks at 12, 3, 6, 9
 const ticks = computed(() => {
   const tickLen = props.size * 0.18
   return [0, 1, 2, 3].map(i => {
@@ -21,24 +20,24 @@ const ticks = computed(() => {
   })
 })
 
-// Hand angles from duration
 const totalMinutes = computed(() => Math.abs(props.ms) / 60000)
-const minuteAngle = computed(() => (totalMinutes.value % 60) / 60 * 360)
-const hourAngle = computed(() => (totalMinutes.value / 60 % 12) / 12 * 360)
+const showHourHand = computed(() => totalMinutes.value >= 60)
 
-// Hand endpoints
+const minuteAngle = computed(() => (totalMinutes.value % 60) / 60 * 360)
 const minuteHand = computed(() => {
   const len = r.value * 0.72
   const a = minuteAngle.value * Math.PI / 180
   return { x: cx.value + len * Math.sin(a), y: cy.value - len * Math.cos(a) }
 })
+
+const hourAngle = computed(() => (totalMinutes.value / 60 % 12) / 12 * 360)
 const hourHand = computed(() => {
   const len = r.value * 0.48
   const a = hourAngle.value * Math.PI / 180
   return { x: cx.value + len * Math.sin(a), y: cy.value - len * Math.cos(a) }
 })
 
-const handStroke = computed(() => props.size > 20 ? 1.5 : 1)
+const minuteStroke = computed(() => props.size > 20 ? 1.5 : 1)
 const hourStroke = computed(() => props.size > 20 ? 2.5 : 1.5)
 const tickStroke = computed(() => props.size > 20 ? 1 : 0.75)
 const dotR = computed(() => props.size > 20 ? 2 : 1)
@@ -46,21 +45,19 @@ const dotR = computed(() => props.size > 20 ? 2 : 1)
 
 <template>
   <svg :width="size" :height="size" :viewBox="`0 0 ${size} ${size}`" style="flex-shrink:0;display:block">
-    <!-- Face -->
     <circle :cx="cx" :cy="cy" :r="r" fill="#f0f0f0" stroke="#ccc" :stroke-width="tickStroke" />
-    <!-- Tick marks -->
     <line
       v-for="(t, i) in ticks" :key="i"
       :x1="t.x1" :y1="t.y1" :x2="t.x2" :y2="t.y2"
       stroke="#999" :stroke-width="tickStroke" stroke-linecap="round"
     />
-    <!-- Hour hand -->
-    <line :x1="cx" :y1="cy" :x2="hourHand.x" :y2="hourHand.y"
+    <!-- Hour hand: only when >= 1h -->
+    <line v-if="showHourHand"
+      :x1="cx" :y1="cy" :x2="hourHand.x" :y2="hourHand.y"
       stroke="#333" :stroke-width="hourStroke" stroke-linecap="round" />
-    <!-- Minute hand -->
+    <!-- Minute hand: always -->
     <line :x1="cx" :y1="cy" :x2="minuteHand.x" :y2="minuteHand.y"
-      stroke="#333" :stroke-width="handStroke" stroke-linecap="round" />
-    <!-- Center dot -->
+      stroke="#333" :stroke-width="minuteStroke" stroke-linecap="round" />
     <circle :cx="cx" :cy="cy" :r="dotR" fill="#333" />
   </svg>
 </template>
