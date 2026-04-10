@@ -388,7 +388,7 @@ function onNameMounted(el: HTMLInputElement | null) {
           </span>
         </span>
         <!-- Used-time clock face -->
-        <ClockFace v-if="!isCommitted && subtreeLimitMs !== null" :ms="displayMs" :size="16" class="clock-used" />
+        <ClockFace v-if="!isCommitted && subtreeLimitMs !== null" :ms="displayMs" :size="16" class="clock-used" @click="startEditTime('day')" />
         <span v-if="timePct !== null" class="pct-cell time-pct">{{ timePct }}%</span>
         <!-- Limit cell: planned mode only -->
         <span v-if="!isCommitted" class="limit-cell">
@@ -416,7 +416,9 @@ function onNameMounted(el: HTMLInputElement | null) {
           </template>
         </span>
         <!-- Limit clock face (after limit numbers) -->
-        <ClockFace v-if="!isCommitted && subtreeLimitMs !== null" :ms="subtreeLimitMs" :size="16" class="clock-limit" />
+        <ClockFace v-if="!isCommitted && subtreeLimitMs !== null" :ms="subtreeLimitMs" :size="16" class="clock-limit" @click="startEditLimit" />
+        <!-- Night-time indicator for narrow screens (when no clock faces shown) -->
+        <span v-if="hasNight && !isCommitted && subtreeLimitMs === null" class="night-narrow-icon" @click.stop="startEditTime('night')"></span>
         <span v-if="limitPct !== null" class="pct-cell limit-pct">{{ limitPct }}%</span>
         <!-- Reverse indent: shallower = wider gap, deeper = narrower (flush with controls) -->
         <span class="reverse-indent" :style="{ width: Math.max(0, 4 - depth) * 20 + 'px' }"></span>
@@ -696,4 +698,35 @@ ul { margin: 0; padding: 0; }
 .btn-complete.is-checked { opacity: 1 !important; }
 .btn-complete::before { content: '\2610'; font-size: 14px; color: #aaa; }
 .btn-complete.is-checked::before { content: '\2611'; color: #4caf50; }
+
+/* ---- Night narrow-screen icon ---- */
+.night-narrow-icon {
+  display: none;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #1565c0;
+  font-size: 12px;
+}
+.night-narrow-icon::before { content: '\1F319'; }
+
+/* ---- Narrow / mobile layout ---- */
+@media (max-width: 600px) {
+  .time-cell,
+  .limit-cell,
+  .pct-cell,
+  .reverse-indent {
+    display: none;
+  }
+  .clock-used,
+  .clock-limit {
+    cursor: pointer;
+  }
+  .night-narrow-icon {
+    display: inline-flex;
+  }
+}
 </style>
