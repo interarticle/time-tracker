@@ -721,6 +721,10 @@ ul { margin: 0; padding: 0; }
   .reverse-indent {
     display: none;
   }
+  .time-cell:has(.cell-input),
+  .limit-cell:has(.cell-input) {
+    display: block;
+  }
   .clock-used,
   .clock-limit {
     cursor: pointer;

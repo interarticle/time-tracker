@@ -58,7 +58,7 @@ const otherRunning = computed(() => tracker.dayState.value.runningTimerIds.lengt
       <span class="time-cell">
         <span class="time-text" :class="{ negative: bufferMs < 0 }">{{ displayTime }}</span>
       </span>
-      <ClockFace v-if="planning.bufferLimitMs.value !== undefined" :ms="bufferMs < 0 ? 0 : bufferMs" :size="16" class="clock-used" />
+      <ClockFace v-if="planning.bufferLimitMs.value !== undefined" :ms="bufferMs < 0 ? 0 : bufferMs" :size="16" class="clock-used" @click="startEditLimit" />
       <span class="limit-cell">
         <input
           v-if="editingLimit"
@@ -79,7 +79,7 @@ const otherRunning = computed(() => tracker.dayState.value.runningTimerIds.lengt
           <span v-else class="limit-set" @click="startEditLimit"></span>
         </template>
       </span>
-      <ClockFace v-if="planning.bufferLimitMs.value !== undefined" :ms="planning.bufferLimitMs.value" :size="16" class="clock-limit" />
+      <ClockFace v-if="planning.bufferLimitMs.value !== undefined" :ms="planning.bufferLimitMs.value" :size="16" class="clock-limit" @click="startEditLimit" />
       <!-- Spacers to match depth-0 TaskNode layout (reverse-indent + timer-btns + struct-btns) -->
       <span class="spacer"></span>
     </span>
@@ -188,5 +188,21 @@ const otherRunning = computed(() => tracker.dayState.value.runningTimerIds.lengt
 .spacer {
   width: 217px;
   flex-shrink: 0;
+}
+
+/* ---- Narrow / mobile layout ---- */
+@media (max-width: 600px) {
+  .time-cell,
+  .limit-cell,
+  .spacer {
+    display: none;
+  }
+  .limit-cell:has(.cell-input) {
+    display: block;
+  }
+  .clock-used,
+  .clock-limit {
+    cursor: pointer;
+  }
 }
 </style>
