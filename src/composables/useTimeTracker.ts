@@ -2,6 +2,7 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import type { TaskNode, TaskTreeData, DayTimerState, TimeTracker } from '@/types'
 import { todayKey, addDays, formatDateDisplay, formatMs, formatCountdown } from '@/utils/format'
 import { loadTree, saveTree, loadDayState, saveDayState, saveMeta } from '@/utils/storage'
+import { hasTag } from '@/utils/tags'
 
 let idCounter = Date.now()
 function newId(): string {
@@ -336,8 +337,23 @@ export function useTimeTracker(): TimeTracker {
     persistDayState()
   }
 
+  /** Returns true if a timeboxed task is at or over its limit and should not start. */
+  function isTimeboxedBlocked(id: string): boolean {
+    const node = findNode(tree.value.roots, id)
+    if (!node || !isLeaf(node)) return false
+    if (!hasTag(node.name, 'timeboxed')) return false
+    if (node.timeLimitMs === null || node.timeLimitMs <= 0) return false
+    const ms = getDisplayMs(id)
+    return ms >= node.timeLimitMs
+  }
+
   function switchTimer(id: string) {
     if (!isToday.value) return
+    if (isTimeboxedBlocked(id)) {
+      const node = findNode(tree.value.roots, id)!
+      notify('Timeboxed — cannot start', `"${node.name}" has reached its time limit. Remove #timeboxed or increase the limit to continue.`)
+      return
+    }
     flush()
     dayState.value.runningTimerIds = [id]
     dayState.value.lastStateChangeAt = Date.now()
@@ -362,6 +378,11 @@ export function useTimeTracker(): TimeTracker {
 
   function shareTimer(id: string) {
     if (!isToday.value) return
+    if (isTimeboxedBlocked(id)) {
+      const node = findNode(tree.value.roots, id)!
+      notify('Timeboxed — cannot start', `"${node.name}" has reached its time limit. Remove #timeboxed or increase the limit to continue.`)
+      return
+    }
     flush()
     if (!dayState.value.runningTimerIds.includes(id)) {
       dayState.value.runningTimerIds.push(id)
@@ -560,6 +581,11 @@ export function useTimeTracker(): TimeTracker {
 
       if (ms >= limit && !state.exceeded) {
         state.exceeded = true
+        if (hasTag(node.name, 'timeboxed')) {
+          stopTimer(id)
+          notify(`\u23F1 ${node.name} — timeboxed limit reached`, `Auto-stopped at ${formatMs(ms)} / ${formatMs(limit)}`)
+          continue
+        }
         notify(`\u26A0\uFE0F ${node.name} — time limit exceeded!`, `${formatMs(ms)} / ${formatMs(limit)}`)
       } else if (isInWarningZone(ms, limit) && !state.warning) {
         state.warning = true

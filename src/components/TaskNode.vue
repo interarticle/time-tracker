@@ -3,6 +3,7 @@ import { inject, ref, computed, watch, nextTick } from 'vue'
 import { TimeTrackerKey, PlanningKey } from '@/types'
 import type { TaskNode, CommittedNode } from '@/types'
 import { formatMs, formatCountdown, parseTimeInput } from '@/utils/format'
+import { parseTags } from '@/utils/tags'
 import ClockFace from './ClockFace.vue'
 
 type AnyNode = TaskNode | CommittedNode
@@ -23,6 +24,8 @@ function toggleComplete() {
   if (isCommitted.value || !isLeaf.value) return
   tracker.setCompleted(props.node.id, !isCompleted.value)
 }
+
+const parsed = computed(() => parseTags(props.node.name))
 
 const running = computed(() => !isCommitted.value && tracker.isRunning(props.node.id))
 const isAfterEod = computed(() => tracker.isAfterEod.value)
@@ -360,7 +363,12 @@ function onNameMounted(el: HTMLInputElement | null) {
           @keydown.escape.prevent="handleEscape"
           @keydown.tab.prevent="handleTabKey($event)"
         />
-        <span v-else class="name-text" @click="startEditName">{{ node.name }}</span>
+        <span v-else class="name-text" @click="startEditName">{{ parsed.displayName }}<span
+          v-for="tag in parsed.tags"
+          :key="tag"
+          :class="['tag-chip', { 'tag-timeboxed': tag.toLowerCase() === 'timeboxed' }]"
+          @click.stop
+        >#{{ tag }}</span></span>
       </span>
 
       <!-- Right: time + limit, then reverse-indent gap, then fixed-width controls -->
@@ -732,5 +740,25 @@ ul { margin: 0; padding: 0; }
   .night-narrow-icon {
     display: inline-flex;
   }
+}
+
+/* ---- Tag chips ---- */
+.tag-chip {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 5px;
+  margin-left: 4px;
+  border-radius: 8px;
+  background-color: #e3edf7;
+  color: #3a6ea5;
+  vertical-align: middle;
+  line-height: 16px;
+  cursor: default;
+  white-space: nowrap;
+}
+.tag-timeboxed {
+  background-color: #fce4ec;
+  color: #c62828;
 }
 </style>
