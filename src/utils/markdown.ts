@@ -13,6 +13,14 @@ function getLeafMs(node: TaskNode, timers: Record<string, { accumulatedMs: numbe
   return (t?.accumulatedMs ?? 0) + (t?.nightAccumulatedMs ?? 0)
 }
 
+function getDayOnlyLeafMs(node: TaskNode, timers: Record<string, { accumulatedMs: number; nightAccumulatedMs?: number }>): number {
+  if (node.children.length > 0) {
+    return node.children.reduce((s, c) => s + getDayOnlyLeafMs(c, timers), 0)
+  }
+  const t = timers[node.id]
+  return t?.accumulatedMs ?? 0
+}
+
 function getSubtreeLimitMs(node: TaskNode): number | null {
   if (node.children.length === 0) return node.timeLimitMs
   let total = 0
@@ -128,8 +136,7 @@ export function generateDayMarkdown(dateKey: string): string {
   // Buffer
   if (planningEnabled) {
     const bufLimitMs = planData.bufferLimitMs
-    // Compute buffer for this day from storage
-    const taskTotalMs = totalMs
+    const dayOnlyTaskMs = tree.roots.reduce((s, r) => s + getDayOnlyLeafMs(r, timers), 0)
     const totalLimitMs = ((() => {
       let sum = 0; let any = false
       for (const r of tree.roots) { const l = getSubtreeLimitMs(r); if (l !== null) { sum += l; any = true } }
@@ -137,10 +144,30 @@ export function generateDayMarkdown(dateKey: string): string {
     })() ?? 0) + (bufLimitMs ?? 0)
 
     if (totalLimitMs > 0 && planData.startOfDayMinutes !== null) {
-      const effectiveEndMs = planData.startOfDayMinutes * 60000 + totalLimitMs
-      const bufferMs = Math.max(0, effectiveEndMs - planData.startOfDayMinutes * 60000 - taskTotalMs)
+      const startMs = planData.startOfDayMinutes * 60000
+      const effectiveEndMs = startMs + totalLimitMs
+
+      // Match UI logic: before EOD use elapsed time, after EOD use full day budget
+      const now = new Date()
+      const nowFromMidnight =
+        (now.getHours() * 60 + now.getMinutes()) * 60000 +
+        now.getSeconds() * 1000
+      const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      const isToday = dateKey === todayKey
+
+      let bufferMs: number
+      if (isToday && nowFromMidnight < effectiveEndMs) {
+        // Before EOD: elapsed time since start minus task time
+        const elapsed = Math.max(0, nowFromMidnight - startMs)
+        bufferMs = elapsed - dayOnlyTaskMs
+      } else {
+        // After EOD or past day: full day budget minus task time
+        bufferMs = totalLimitMs - dayOnlyTaskMs
+      }
+
+      const bufferStr = bufferMs < 0 ? '−' + formatMs(-bufferMs) : formatMs(bufferMs)
       lines.push('## Buffer')
-      lines.push(`- **${BUFFER_NAME}:** ${formatMs(bufferMs)}${bufLimitMs !== undefined ? ` / limit ${formatMsHM(bufLimitMs)}` : ''}`)
+      lines.push(`- **${BUFFER_NAME}:** ${bufferStr}${bufLimitMs !== undefined ? ` / limit ${formatMsHM(bufLimitMs)}` : ''}`)
       lines.push('')
     }
   }
