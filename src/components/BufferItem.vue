@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { inject, ref, computed } from 'vue'
 import { TimeTrackerKey, PlanningKey, BUFFER_NAME } from '@/types'
-import { formatMs, parseTimeInput } from '@/utils/format'
+import { formatMs, parseTimeInput, formatForEdit } from '@/utils/format'
 import ClockFace from './ClockFace.vue'
 
 const tracker = inject(TimeTrackerKey)!
@@ -21,9 +21,7 @@ const limitInput = ref('')
 
 function startEditLimit() {
   editingLimit.value = true
-  limitInput.value = planning.bufferLimitMs.value !== undefined
-    ? formatMs(planning.bufferLimitMs.value)
-    : ''
+  limitInput.value = formatForEdit(planning.bufferLimitMs.value, 'hms')
 }
 function commitLimit() {
   if (limitInput.value.trim() === '') {

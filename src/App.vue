@@ -3,7 +3,7 @@ import { provide, computed, ref, watch, onMounted } from 'vue'
 import { TimeTrackerKey, PlanningKey } from '@/types'
 import { useTimeTracker } from '@/composables/useTimeTracker'
 import { usePlanning } from '@/composables/usePlanning'
-import { formatMs, parseHoursMinutes } from '@/utils/format'
+import { formatMs, parseHoursMinutes, formatForEdit } from '@/utils/format'
 import DateNav from '@/components/DateNav.vue'
 import TaskTree from '@/components/TaskTree.vue'
 import CommittedSection from '@/components/CommittedSection.vue'
@@ -135,15 +135,7 @@ const showPlanningDialog = ref(false)
 const planningLimitInput = ref('')
 
 function openPlanningDialog() {
-  const ms = planning.dailyLimitMs.value
-  if (ms !== undefined) {
-    const totalMinutes = Math.floor(ms / 60000)
-    const h = Math.floor(totalMinutes / 60)
-    const m = totalMinutes % 60
-    planningLimitInput.value = `${h}:${String(m).padStart(2, '0')}`
-  } else {
-    planningLimitInput.value = ''
-  }
+  planningLimitInput.value = formatForEdit(planning.dailyLimitMs.value, 'hm')
   showPlanningDialog.value = true
 }
 

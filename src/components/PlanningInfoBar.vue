@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { inject, ref, computed } from 'vue'
 import { PlanningKey } from '@/types'
-import { formatMsHM, formatMinutes, parseClockHHMM, parseHoursMinutes } from '@/utils/format'
+import { formatMsHM, formatMinutes, parseClockHHMM, parseHoursMinutes, formatForEdit } from '@/utils/format'
 
 const planning = inject(PlanningKey)!
 
@@ -26,15 +26,7 @@ const limitDisplay = computed(() =>
 
 function startEditLimit() {
   editingLimit.value = true
-  const ms = planning.dailyLimitMs.value
-  if (ms !== undefined) {
-    const totalMinutes = Math.floor(ms / 60000)
-    const h = Math.floor(totalMinutes / 60)
-    const m = totalMinutes % 60
-    limitInput.value = `${h}:${String(m).padStart(2, '0')}`
-  } else {
-    limitInput.value = ''
-  }
+  limitInput.value = formatForEdit(planning.dailyLimitMs.value, 'hm')
 }
 
 function commitLimit() {
@@ -65,10 +57,7 @@ const endDisplay = computed(() =>
 
 function startEditStart() {
   editingStart.value = true
-  startInput.value =
-    planning.startOfDayMinutes.value !== null
-      ? formatMinutes(planning.startOfDayMinutes.value)
-      : ''
+  startInput.value = formatForEdit(planning.startOfDayMinutes.value, 'clock')
 }
 
 function commitStart() {
@@ -76,7 +65,8 @@ function commitStart() {
     planning.setStartOfDay(null)
   } else {
     const mins = parseClockHHMM(startInput.value)
-    if (mins !== null) planning.setStartOfDay(mins)
+    // 0:00 (midnight) collapses to "unset" — uniform with empty.
+    if (mins !== null) planning.setStartOfDay(mins === 0 ? null : mins)
   }
   editingStart.value = false
 }

@@ -2,7 +2,7 @@
 import { inject, ref, computed, watch, nextTick } from 'vue'
 import { TimeTrackerKey, PlanningKey } from '@/types'
 import type { TaskNode, CommittedNode } from '@/types'
-import { formatMs, formatCountdown, parseTimeInput } from '@/utils/format'
+import { formatMs, formatCountdown, parseTimeInput, formatForEdit } from '@/utils/format'
 import { parseTags } from '@/utils/tags'
 import ClockFace from './ClockFace.vue'
 
@@ -144,10 +144,10 @@ function handleNameEnter() {
   // Leaf: move focus to the time/limit field
   if (isCommitted.value) {
     editingTime.value = true
-    timeInput.value = formatMs((props.node as CommittedNode).durationMs ?? 0)
+    timeInput.value = formatForEdit((props.node as CommittedNode).durationMs, 'hms')
   } else {
     editingLimit.value = true
-    limitInput.value = timeLimitMs.value !== null ? formatMs(timeLimitMs.value) : ''
+    limitInput.value = formatForEdit(timeLimitMs.value, 'hms')
   }
 }
 
@@ -270,13 +270,12 @@ function startEditTime(which: 'day' | 'night' = 'day') {
     if (!isLeaf.value) return
     editingTime.value = true
     editingWhich.value = 'day'
-    const cn = props.node as CommittedNode
-    timeInput.value = formatMs(cn.durationMs ?? 0)
+    timeInput.value = formatForEdit((props.node as CommittedNode).durationMs, 'hms')
   } else {
     if (!isLeaf.value || running.value) return
     editingTime.value = true
     editingWhich.value = which
-    timeInput.value = which === 'night' ? nightTime.value : dayTime.value
+    timeInput.value = formatForEdit(which === 'night' ? nightMs.value : dayMs.value, 'hms')
   }
 }
 
@@ -304,7 +303,7 @@ const limitInput = ref('')
 function startEditLimit() {
   if (isCommitted.value || !isLeaf.value || isCompleted.value) return
   editingLimit.value = true
-  limitInput.value = timeLimitMs.value !== null ? formatMs(timeLimitMs.value) : ''
+  limitInput.value = formatForEdit(timeLimitMs.value, 'hms')
 }
 function commitLimit() {
   if (isCommitted.value) return
