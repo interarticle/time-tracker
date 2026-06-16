@@ -722,8 +722,12 @@ export function useTimeTracker(): TimeTracker {
     style.textContent = `
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fff; color: #222; padding: 10px; font-size: 13px; height: 100vh; display: flex; flex-direction: column; gap: 8px; }
+      /* Full-page background pie for the most-elapsed running timer */
+      #pip-bg { position: fixed; inset: 0; z-index: 0; background: transparent; }
+      #pip-bg.is-elapsed { background: #b71c1c !important; animation: pipElapsed 3.6s ease-in-out infinite; }
+      #pip-tasks, #pip-eod, #pip-stop, #pip-overcommit { position: relative; z-index: 1; }
       #pip-tasks { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-      .pip-task { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 5px; background: #f5f5f5; }
+      .pip-task { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 5px; background: rgba(245,245,245,0.74); }
       .pip-task.is-warning { background: #fff8e1; animation: pw 1.5s ease-in-out infinite; }
       .pip-task.is-exceeded { background: #ffebee; animation: pd 1s ease-in-out infinite; }
       .pip-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -735,8 +739,12 @@ export function useTimeTracker(): TimeTracker {
       #pip-stop:hover { background: #b71c1c; }
       @keyframes pw { 0%,100% { background:#fff8e1; } 50% { background:#ffe082; } }
       @keyframes pd { 0%,100% { background:#ffebee; } 50% { background:#ef9a9a; } }
+      @keyframes pipElapsed { 0%,100% { background:#b71c1c; } 50% { background:#7d1414; } }
     `
     doc.head.appendChild(style)
+    const bg = doc.createElement('div')
+    bg.id = 'pip-bg'
+    doc.body.appendChild(bg)
     const tasks = doc.createElement('div')
     tasks.id = 'pip-tasks'
     const eodEl = doc.createElement('div')
@@ -764,11 +772,15 @@ export function useTimeTracker(): TimeTracker {
       if (!activeSet.has(el.dataset.id!)) el.remove()
     })
 
+    // Track the highest-percentage timer (those with a limit) to drive the background pie.
+    let maxRatio = -1
+
     for (const id of ids) {
       const node = findNode(tree.value.roots, id)
       if (!node) continue
       const ms = getDisplayMs(id)
       const limit = node.timeLimitMs
+      if (limit !== null && limit > 0) maxRatio = Math.max(maxRatio, ms / limit)
 
       let cls = 'pip-task'
       if (limit !== null && limit > 0) {
@@ -802,6 +814,28 @@ export function useTimeTracker(): TimeTracker {
         limitEl.style.fontWeight = '600'
       } else {
         limitEl.textContent = ''
+      }
+    }
+
+    // Background pie: the most-elapsed running timer fills the page from 12 o'clock,
+    // clockwise. Its color shifts green → yellow → red as time runs out; once the
+    // limit is reached the whole background turns red and slowly pulses.
+    const bgEl = doc.getElementById('pip-bg') as HTMLElement | null
+    if (bgEl) {
+      if (maxRatio < 0) {
+        // No running timer has a limit — nothing to show.
+        bgEl.classList.remove('is-elapsed')
+        bgEl.style.background = 'transparent'
+      } else if (maxRatio >= 1) {
+        bgEl.style.background = ''
+        bgEl.classList.add('is-elapsed')
+      } else {
+        bgEl.classList.remove('is-elapsed')
+        const pct = maxRatio * 100
+        // Hue 120° (green) → 0° (red) as the pie fills, passing through 60° (yellow).
+        const hue = 120 * (1 - maxRatio)
+        const fill = `hsl(${hue.toFixed(1)}, 72%, 55%)`
+        bgEl.style.background = `conic-gradient(${fill} 0 ${pct.toFixed(2)}%, #ededed ${pct.toFixed(2)}% 100%)`
       }
     }
 
