@@ -397,7 +397,7 @@ function onNameMounted(el: HTMLInputElement | null) {
         <span v-if="!priorityRow" class="indent" :style="{ width: depth * 20 + 'px' }" aria-hidden="true"></span>
         <span
           v-if="priorityChip"
-          :class="['priority-chip', { 'priority-none': priority === null }]"
+          :class="['priority-chip', { 'priority-none': priority === null, 'priority-p0': priority === 0, 'priority-p1': priority === 1 }]"
         >{{ priorityChip }}</span>
         <span class="node-icon" aria-hidden="true">{{ isLeaf ? '\u2022' : '\u25BE' }}</span>
         <input
@@ -765,6 +765,15 @@ ul { margin: 0; padding: 0; }
 .priority-chip.priority-none {
   background-color: #f0f0f0;
   color: #aaa;
+}
+/* P0 = red (highest), P1 = yellow, everything else keeps the default blue. */
+.priority-chip.priority-p0 {
+  background-color: #fde8e8;
+  color: #c0392b;
+}
+.priority-chip.priority-p1 {
+  background-color: #fff3cd;
+  color: #a87900;
 }
 
 /* Hierarchical path label (priority view) */

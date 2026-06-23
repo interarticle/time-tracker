@@ -8,7 +8,6 @@ import DateNav from '@/components/DateNav.vue'
 import TaskTree from '@/components/TaskTree.vue'
 import CommittedSection from '@/components/CommittedSection.vue'
 import PlanningInfoBar from '@/components/PlanningInfoBar.vue'
-import PriorityView from '@/components/PriorityView.vue'
 import CategoryBreakdown from '@/components/CategoryBreakdown.vue'
 import CopyOverlay from '@/components/CopyOverlay.vue'
 
@@ -199,17 +198,14 @@ function disablePlanningAndClose() {
       </div>
     </header>
     <main>
-      <template v-if="priorityView">
-        <PriorityView />
-      </template>
-      <template v-else-if="planning.planningEnabled.value">
+      <template v-if="planning.planningEnabled.value">
         <CommittedSection />
         <PlanningInfoBar />
-        <TaskTree mode="planned" />
+        <TaskTree mode="planned" :priority="priorityView" />
         <CategoryBreakdown />
       </template>
       <template v-else>
-        <TaskTree />
+        <TaskTree :priority="priorityView" />
       </template>
     </main>
     <footer class="build-info">{{ buildInfo }}</footer>

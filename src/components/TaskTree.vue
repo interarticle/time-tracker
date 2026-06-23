@@ -4,15 +4,19 @@ import { TimeTrackerKey, PlanningKey } from '@/types'
 import type { CommittedNode, TaskNode as TaskNodeData } from '@/types'
 import TaskNode from './TaskNode.vue'
 import BufferItem from './BufferItem.vue'
+import PriorityView from './PriorityView.vue'
 import ClockFace from './ClockFace.vue'
 import { formatMsHM, formatMinutes } from '@/utils/format'
 
-const props = defineProps<{ mode?: 'planned' | 'committed' }>()
+const props = defineProps<{ mode?: 'planned' | 'committed'; priority?: boolean }>()
 
 const tracker = inject(TimeTrackerKey)!
 const planning = inject(PlanningKey, null)
 
 const isCommitted = computed(() => props.mode === 'committed')
+
+// Priority list only applies to the planned task list (never the committed tree).
+const showPriority = computed(() => !!props.priority && !isCommitted.value)
 
 const roots = computed(() =>
   isCommitted.value
@@ -71,21 +75,25 @@ const effectiveEndMinutes = computed(() => {
       </template>
     </div>
 
-    <div v-if="roots.length === 0" class="empty-state">
-      <p>{{ isCommitted ? 'No committed items yet.' : 'No tasks yet.' }}</p>
-      <button v-if="!isCommitted" class="add-root-btn" @click="tracker.addRoot()">+ Add Task</button>
-    </div>
+    <!-- Priority view: flat, priority-sorted leaf list (planned mode only) -->
+    <PriorityView v-if="showPriority" />
     <template v-else>
-      <ul class="task-list">
-        <TaskNode
-          v-for="root in (roots as (TaskNodeData | CommittedNode)[])"
-          :key="root.id"
-          :node="root"
-          :depth="0"
-          :mode="props.mode"
-        />
-      </ul>
-      <button v-if="!isCommitted" class="add-root-btn" @click="tracker.addRoot()">+ Add Task</button>
+      <div v-if="roots.length === 0" class="empty-state">
+        <p>{{ isCommitted ? 'No committed items yet.' : 'No tasks yet.' }}</p>
+        <button v-if="!isCommitted" class="add-root-btn" @click="tracker.addRoot()">+ Add Task</button>
+      </div>
+      <template v-else>
+        <ul class="task-list">
+          <TaskNode
+            v-for="root in (roots as (TaskNodeData | CommittedNode)[])"
+            :key="root.id"
+            :node="root"
+            :depth="0"
+            :mode="props.mode"
+          />
+        </ul>
+        <button v-if="!isCommitted" class="add-root-btn" @click="tracker.addRoot()">+ Add Task</button>
+      </template>
     </template>
 
     <!-- Permanent buffer item: planned mode + planning enabled -->
