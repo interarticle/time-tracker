@@ -22,7 +22,8 @@ function getDayOnlyLeafMs(node: TaskNode, timers: Record<string, { accumulatedMs
 }
 
 function getSubtreeLimitMs(node: TaskNode): number | null {
-  if (node.children.length === 0) return node.timeLimitMs
+  // Deprioritized leaves contribute a zero limit, matching the live tracker.
+  if (node.children.length === 0) return node.deprioritized ? (node.timeLimitMs === null ? null : 0) : node.timeLimitMs
   let total = 0
   let hasAny = false
   for (const c of node.children) {

@@ -182,9 +182,9 @@ const otherRunning = computed(() => tracker.dayState.value.runningTimerIds.lengt
   outline: none;
 }
 
-/* Matches: reverse-indent(80) + timer-btns(46) + struct-btns(68) + complete-cell(23) = 217px at depth 0 */
+/* Matches: reverse-indent(80) + timer-btns(46) + struct-btns(68) + deprio-cell(23) + complete-cell(23) = 240px at depth 0 */
 .spacer {
-  width: 217px;
+  width: 240px;
   flex-shrink: 0;
 }
 

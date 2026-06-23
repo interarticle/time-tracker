@@ -438,6 +438,15 @@ export function useTimeTracker(): TimeTracker {
     persistTree()
   }
 
+  function setDeprioritized(nodeId: string, deprioritized: boolean) {
+    const node = findNode(tree.value.roots, nodeId)
+    if (!node || !isLeaf(node)) return
+    // Cannot deprioritize a leaf that has already counted time.
+    if (deprioritized && (getDisplayMs(nodeId) > 0 || isRunning(nodeId))) return
+    node.deprioritized = deprioritized
+    persistTree()
+  }
+
   // --- Display helpers ---
   const now = ref(Date.now())
 
@@ -503,7 +512,8 @@ export function useTimeTracker(): TimeTracker {
 
   /** Returns the sum of all leaf limits in the subtree, or null if no leaf has a limit. */
   function getSubtreeLimitMs(node: TaskNode): number | null {
-    if (isLeaf(node)) return node.timeLimitMs
+    // Deprioritized leaves contribute a zero limit (still "set", just zeroed out).
+    if (isLeaf(node)) return node.deprioritized ? (node.timeLimitMs === null ? null : 0) : node.timeLimitMs
     let total = 0
     let hasAny = false
     for (const child of node.children) {
@@ -942,6 +952,7 @@ export function useTimeTracker(): TimeTracker {
     setAccumulatedMs,
     setNightAccumulatedMs,
     setCompleted,
+    setDeprioritized,
     setOvercommitForPip,
     getDisplayMs,
     getDayDisplayMs,

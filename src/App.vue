@@ -8,6 +8,7 @@ import DateNav from '@/components/DateNav.vue'
 import TaskTree from '@/components/TaskTree.vue'
 import CommittedSection from '@/components/CommittedSection.vue'
 import PlanningInfoBar from '@/components/PlanningInfoBar.vue'
+import PriorityView from '@/components/PriorityView.vue'
 import CategoryBreakdown from '@/components/CategoryBreakdown.vue'
 import CopyOverlay from '@/components/CopyOverlay.vue'
 
@@ -130,6 +131,9 @@ function importData() {
   }
 }
 
+// --- Priority view toggle (not persisted) ---
+const priorityView = ref(false)
+
 // --- Planning dialog ---
 const showPlanningDialog = ref(false)
 const planningLimitInput = ref('')
@@ -169,6 +173,12 @@ function disablePlanningAndClose() {
           :class="{ 'sigma-active': planning.planningEnabled.value }"
           @click="openPlanningDialog"
         >Σ</button>
+        <button
+          class="icon-btn sigma-btn"
+          :class="{ 'sigma-active': priorityView }"
+          @click="priorityView = !priorityView"
+          title="Priority view"
+        >P&#x2193;</button>
         <button class="icon-btn" @click="showCopyOverlay = true" title="Copy as Markdown">&#x1F4CB;</button>
         <button class="icon-btn" @click="showHelpDialog = true" title="Help">?</button>
         <button class="icon-btn" @click="openDataDialog" title="Import / Export">&#x1F4BE;</button>
@@ -189,7 +199,10 @@ function disablePlanningAndClose() {
       </div>
     </header>
     <main>
-      <template v-if="planning.planningEnabled.value">
+      <template v-if="priorityView">
+        <PriorityView />
+      </template>
+      <template v-else-if="planning.planningEnabled.value">
         <CommittedSection />
         <PlanningInfoBar />
         <TaskTree mode="planned" />

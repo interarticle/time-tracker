@@ -6,6 +6,8 @@ export interface TaskNode {
   children: TaskNode[]
   timeLimitMs: number | null
   completed?: boolean
+  /** Deprioritized leaf: limit is treated as zero and all controls are disabled. */
+  deprioritized?: boolean
 }
 
 export interface TaskTreeData {
@@ -80,6 +82,7 @@ export interface TimeTracker {
   setAccumulatedMs: (id: string, ms: number) => void
   setNightAccumulatedMs: (id: string, ms: number) => void
   setCompleted: (nodeId: string, completed: boolean) => void
+  setDeprioritized: (nodeId: string, deprioritized: boolean) => void
   setOvercommitForPip: (ms: number) => void
 
   // Display helpers

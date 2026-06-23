@@ -30,3 +30,27 @@ export function hasTag(name: string, tag: string): boolean {
   }
   return false
 }
+
+/** A priority tag looks like #p0, #p1, … — the number is the priority (0 = highest). */
+const PRIORITY_RE = /^p(\d+)$/i
+
+export function isPriorityTag(tag: string): boolean {
+  return PRIORITY_RE.test(tag)
+}
+
+/**
+ * Extract the priority from a name's #p<number> tag. Lower numbers are higher
+ * priority. Returns null when no priority tag is present. If several are given,
+ * the highest priority (lowest number) wins.
+ */
+export function parsePriority(name: string): number | null {
+  let best: number | null = null
+  for (const tag of parseTags(name).tags) {
+    const m = tag.match(PRIORITY_RE)
+    if (m) {
+      const n = Number(m[1])
+      if (best === null || n < best) best = n
+    }
+  }
+  return best
+}

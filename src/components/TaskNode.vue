@@ -3,12 +3,22 @@ import { inject, ref, computed, watch, nextTick } from 'vue'
 import { TimeTrackerKey, PlanningKey } from '@/types'
 import type { TaskNode, CommittedNode } from '@/types'
 import { formatMs, formatCountdown, parseTimeInput, formatForEdit } from '@/utils/format'
-import { parseTags } from '@/utils/tags'
+import { parseTags, parsePriority, isPriorityTag } from '@/utils/tags'
 import ClockFace from './ClockFace.vue'
 
 type AnyNode = TaskNode | CommittedNode
 
-const props = defineProps<{ node: AnyNode; depth: number; mode?: 'planned' | 'committed' }>()
+const props = defineProps<{
+  node: AnyNode
+  depth: number
+  mode?: 'planned' | 'committed'
+  /** Priority-list rendering: flat (no indent), hierarchical name, priority chip + cumulative limit. */
+  priorityRow?: boolean
+  /** Ancestor labels joined with " > " (priority view only). */
+  pathPrefix?: string
+  /** Running cumulative sum of limits down the prioritized order (priority view only). */
+  cumLimitMs?: number | null
+}>()
 const tracker = inject(TimeTrackerKey)!
 const planning = inject(PlanningKey, null)
 
@@ -17,15 +27,46 @@ const isLeaf = computed(() => props.node.children.length === 0)
 const isCompleted = computed(() =>
   !isCommitted.value && isLeaf.value && !!((props.node as TaskNode).completed),
 )
+const isDeprioritized = computed(() =>
+  !isCommitted.value && isLeaf.value && !!((props.node as TaskNode).deprioritized),
+)
+// A deprioritized leaf can be re-prioritized any time; a normal leaf can only be
+// deprioritized when no time has been counted yet.
+const canDeprioritize = computed(
+  () => !isCommitted.value && isLeaf.value && !isCompleted.value &&
+    (isDeprioritized.value || (!running.value && displayMs.value === 0)),
+)
 const showLimitStrikethrough = computed(() =>
-  isCompleted.value && timeLimitMs.value !== null && displayMs.value < timeLimitMs.value,
+  isDeprioritized.value ||
+  (isCompleted.value && timeLimitMs.value !== null && displayMs.value < timeLimitMs.value),
 )
 function toggleComplete() {
-  if (isCommitted.value || !isLeaf.value) return
+  if (isCommitted.value || !isLeaf.value || isDeprioritized.value) return
   tracker.setCompleted(props.node.id, !isCompleted.value)
+}
+function toggleDeprioritize() {
+  if (!canDeprioritize.value) return
+  tracker.setDeprioritized(props.node.id, !isDeprioritized.value)
 }
 
 const parsed = computed(() => parseTags(props.node.name))
+// Tags shown as chips. On a planned leaf the #p<n> priority tag is rendered as a
+// dedicated priority chip instead, so drop it here; elsewhere keep all tags.
+const displayTags = computed(() =>
+  !isCommitted.value && isLeaf.value
+    ? parsed.value.tags.filter((t) => !isPriorityTag(t))
+    : parsed.value.tags,
+)
+// Priority is only meaningful for planned leaves.
+const priority = computed(() =>
+  !isCommitted.value && isLeaf.value ? parsePriority(props.node.name) : null,
+)
+// In the priority view every leaf shows a chip (P? when unprioritized); elsewhere
+// only prioritized leaves show one.
+const priorityChip = computed(() => {
+  if (priority.value !== null) return `P${priority.value}`
+  return props.priorityRow ? 'P?' : null
+})
 
 const running = computed(() => !isCommitted.value && tracker.isRunning(props.node.id))
 const isAfterEod = computed(() => tracker.isAfterEod.value)
@@ -93,6 +134,10 @@ const countdownColor = computed(() => countdownMs.value >= 0 ? '#2e7d32' : '#c62
 const rowClasses = computed(() => {
   if (isCommitted.value) return {}
   const c: Record<string, boolean> = {}
+  if (isDeprioritized.value) {
+    c['is-deprioritized'] = true
+    return c
+  }
   if (isCompleted.value) {
     c['is-completed'] = true
     // Overtime items keep their red; warning items lose their yellow
@@ -265,7 +310,7 @@ const editingWhich = ref<'day' | 'night'>('day')
 const timeInput = ref('')
 
 function startEditTime(which: 'day' | 'night' = 'day') {
-  if (!isCommitted.value && isCompleted.value) return
+  if (!isCommitted.value && (isCompleted.value || isDeprioritized.value)) return
   if (isCommitted.value) {
     if (!isLeaf.value) return
     editingTime.value = true
@@ -301,7 +346,7 @@ function commitTime() {
 const editingLimit = ref(false)
 const limitInput = ref('')
 function startEditLimit() {
-  if (isCommitted.value || !isLeaf.value || isCompleted.value) return
+  if (isCommitted.value || !isLeaf.value || isCompleted.value || isDeprioritized.value) return
   editingLimit.value = true
   limitInput.value = formatForEdit(timeLimitMs.value, 'hms')
 }
@@ -349,10 +394,14 @@ function onNameMounted(el: HTMLInputElement | null) {
     <div class="task-row" :class="rowClasses">
       <!-- Left: tree-indented name -->
       <span class="row-left">
-        <span class="indent" :style="{ width: depth * 20 + 'px' }" aria-hidden="true"></span>
+        <span v-if="!priorityRow" class="indent" :style="{ width: depth * 20 + 'px' }" aria-hidden="true"></span>
+        <span
+          v-if="priorityChip"
+          :class="['priority-chip', { 'priority-none': priority === null }]"
+        >{{ priorityChip }}</span>
         <span class="node-icon" aria-hidden="true">{{ isLeaf ? '\u2022' : '\u25BE' }}</span>
         <input
-          v-if="editingName || !node.name"
+          v-if="!priorityRow && (editingName || !node.name)"
           :ref="(el) => onNameMounted(el as HTMLInputElement | null)"
           v-model="nameInput"
           class="name-input"
@@ -362,8 +411,16 @@ function onNameMounted(el: HTMLInputElement | null) {
           @keydown.escape.prevent="handleEscape"
           @keydown.tab.prevent="handleTabKey($event)"
         />
+        <span v-else-if="priorityRow" class="name-text path-name"><span
+          v-if="pathPrefix"
+          class="path-prefix"
+        >{{ pathPrefix }} › </span>{{ parsed.displayName }}<span
+          v-for="tag in displayTags"
+          :key="tag"
+          :class="['tag-chip', { 'tag-timeboxed': tag.toLowerCase() === 'timeboxed' }]"
+        >#{{ tag }}</span></span>
         <span v-else class="name-text" @click="startEditName">{{ parsed.displayName }}<span
-          v-for="tag in parsed.tags"
+          v-for="tag in displayTags"
           :key="tag"
           :class="['tag-chip', { 'tag-timeboxed': tag.toLowerCase() === 'timeboxed' }]"
           @click.stop
@@ -395,7 +452,7 @@ function onNameMounted(el: HTMLInputElement | null) {
           </span>
         </span>
         <!-- Used-time clock face -->
-        <ClockFace v-if="!isCommitted && subtreeLimitMs !== null" :ms="displayMs" :size="16" class="clock-used" @click="startEditTime('day')" />
+        <ClockFace v-if="!isCommitted && !isDeprioritized && subtreeLimitMs !== null" :ms="displayMs" :size="16" class="clock-used" @click="startEditTime('day')" />
         <span v-if="timePct !== null" class="pct-cell time-pct">{{ timePct }}%</span>
         <!-- Limit cell: planned mode only -->
         <span v-if="!isCommitted" class="limit-cell">
@@ -423,7 +480,7 @@ function onNameMounted(el: HTMLInputElement | null) {
           </template>
         </span>
         <!-- Limit clock face (after limit numbers) -->
-        <ClockFace v-if="!isCommitted && subtreeLimitMs !== null" :ms="subtreeLimitMs" :size="16" class="clock-limit" @click="startEditLimit" />
+        <ClockFace v-if="!isCommitted && !isDeprioritized && subtreeLimitMs !== null" :ms="subtreeLimitMs" :size="16" class="clock-limit" @click="startEditLimit" />
         <!-- Night-time indicator for narrow screens (when no clock faces shown) -->
         <span v-if="hasNight && !isCommitted && subtreeLimitMs === null" class="night-narrow-icon" @click.stop="startEditTime('night')"></span>
         <span v-if="limitPct !== null" class="pct-cell limit-pct">{{ limitPct }}%</span>
@@ -431,26 +488,37 @@ function onNameMounted(el: HTMLInputElement | null) {
         <span class="reverse-indent" :style="{ width: Math.max(0, 4 - depth) * 20 + 'px' }"></span>
         <!-- Timer buttons: planned mode only -->
         <span class="timer-btns">
-          <template v-if="!isCommitted && isLeaf && tracker.isToday.value && !isCompleted">
+          <template v-if="!isCommitted && isLeaf && tracker.isToday.value && !isCompleted && !isDeprioritized">
             <button v-if="!running" class="btn btn-switch" :class="{ 'btn-night': isAfterEod }" @click="tracker.openPip().then(() => tracker.switchTimer(node.id))" title="Switch"></button>
             <button v-if="running" class="btn btn-stop" @click="tracker.stopTimer(node.id)" title="Stop"></button>
             <button v-if="!running" class="btn btn-share" :class="{ 'btn-night': isAfterEod }" @click="tracker.openPip().then(() => tracker.shareTimer(node.id))" title="Share"></button>
           </template>
         </span>
-        <span class="struct-btns">
+        <span v-if="!priorityRow" class="struct-btns">
           <button class="btn btn-struct btn-add-child" @click="doAddChild" title="Add child"></button>
           <button class="btn btn-struct btn-add-sibling" @click="doAddSibling" title="Add sibling"></button>
           <button class="btn btn-struct btn-delete" @click="handleDelete" title="Delete"></button>
         </span>
+        <!-- Deprioritize toggle: planned leaves only (hidden until hover, like the checkbox) -->
+        <span class="deprio-cell">
+          <button
+            v-if="!isCommitted && isLeaf && canDeprioritize"
+            :class="['btn', 'btn-deprio', { 'is-active': isDeprioritized }]"
+            @click="toggleDeprioritize"
+            :title="isDeprioritized ? 'Re-prioritize' : 'Deprioritize (zero out limit)'"
+          ></button>
+        </span>
         <!-- Complete toggle: planned leaves only; spacer for others -->
         <span class="complete-cell">
           <button
-            v-if="!isCommitted && isLeaf"
+            v-if="!isCommitted && isLeaf && !isDeprioritized"
             :class="['btn', 'btn-complete', { 'is-checked': isCompleted }]"
             @click="toggleComplete"
             :title="isCompleted ? 'Mark incomplete' : 'Mark complete'"
           ></button>
         </span>
+        <!-- Cumulative limit (priority view only): sum of limits down the prioritized order -->
+        <span v-if="priorityRow" class="cumsum-cell">{{ cumLimitMs ? formatMs(cumLimitMs) : '—' }}</span>
       </span>
     </div>
 
@@ -680,6 +748,63 @@ ul { margin: 0; padding: 0; }
 .btn-delete::before      { content: '\00D7'; font-size: 16px; }
 .btn-struct:hover { color: #555; }
 .btn-delete:hover { color: #c62828 !important; }
+
+/* Priority chip (before the leaf name) */
+.priority-chip {
+  flex-shrink: 0;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  margin-right: 5px;
+  border-radius: 8px;
+  background-color: #e3edf7;
+  color: #2f6db3;
+  line-height: 16px;
+}
+.priority-chip.priority-none {
+  background-color: #f0f0f0;
+  color: #aaa;
+}
+
+/* Hierarchical path label (priority view) */
+.path-name { color: #333; }
+.path-prefix { color: #aaa; }
+
+/* Deprioritize toggle button (hover-revealed, like the checkbox) */
+.deprio-cell {
+  width: 23px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.btn-deprio {
+  opacity: 0;
+  transition: opacity 0.12s;
+  width: 20px;
+  height: 20px;
+}
+.task-row:hover .btn-deprio { opacity: 0.45; }
+.btn-deprio.is-active { opacity: 1 !important; }
+.btn-deprio::before { content: '\2298'; font-size: 14px; color: #aaa; }
+.btn-deprio.is-active::before { color: #c0392b; }
+
+/* Cumulative limit cell (priority view) */
+.cumsum-cell {
+  width: 72px;
+  flex-shrink: 0;
+  text-align: right;
+  padding-left: 8px;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #777;
+}
+
+/* Deprioritized state: dimmed, limit struck through, controls hidden */
+.task-row.is-deprioritized { opacity: 0.55; }
+.task-row.is-deprioritized .name-text { color: #999; }
 
 /* Completed state */
 .task-row.is-completed { opacity: 0.7; }
