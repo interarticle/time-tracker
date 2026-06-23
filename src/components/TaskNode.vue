@@ -18,6 +18,8 @@ const props = defineProps<{
   pathPrefix?: string
   /** Running cumulative sum of limits down the prioritized order (priority view only). */
   cumLimitMs?: number | null
+  /** Visually-trimmed limit when overcommit is being absorbed (priority view only). */
+  trimmedLimitMs?: number | null
 }>()
 const tracker = inject(TimeTrackerKey)!
 const planning = inject(PlanningKey, null)
@@ -67,6 +69,11 @@ const priorityChip = computed(() => {
   if (priority.value !== null) return `P${priority.value}`
   return props.priorityRow ? 'P?' : null
 })
+// Limit-trim display: main shows the trimmed limit, with the real (configured) limit
+// beneath it in dark red. Only in the priority view, only when a trim was allocated.
+const trimActive = computed(
+  () => props.priorityRow && props.trimmedLimitMs != null && timeLimitMs.value !== null,
+)
 
 const running = computed(() => !isCommitted.value && tracker.isRunning(props.node.id))
 const isAfterEod = computed(() => tracker.isAfterEod.value)
@@ -467,6 +474,12 @@ function onNameMounted(el: HTMLInputElement | null) {
               @keydown.escape="editingLimit = false"
               @vue:mounted="($event: any) => $event.el.focus()"
             />
+            <template v-else-if="trimActive">
+              <span class="limit-trim">
+                <span class="limit-text trim-main">/{{ formatMs(trimmedLimitMs ?? 0) }}</span>
+                <span class="limit-actual editable" @click="startEditLimit">{{ formatMs(timeLimitMs ?? 0) }}</span>
+              </span>
+            </template>
             <template v-else-if="showCountdown">
               <span class="countdown-text" :style="{ color: countdownColor }">{{ countdownText }}</span>
             </template>
@@ -740,6 +753,27 @@ ul { margin: 0; padding: 0; }
 .night-time.editable {
   cursor: pointer;
   text-decoration: underline dotted #7baad4;
+}
+
+/* Limit trim (priority view, overcommit): trimmed limit on top, real limit (dark red) below */
+.limit-trim {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+}
+.limit-actual {
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 10px;
+  color: #8b1a1a;
+  text-align: right;
+  line-height: 1.2;
+  /* Struck through: this is the original limit, replaced by the trimmed value above. */
+  text-decoration: line-through;
+  text-decoration-color: #8b1a1a;
+}
+.limit-actual.editable {
+  cursor: pointer;
 }
 
 .btn-struct { color: #aaa; }
