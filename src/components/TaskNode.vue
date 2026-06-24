@@ -402,11 +402,11 @@ function onNameMounted(el: HTMLInputElement | null) {
       <!-- Left: tree-indented name -->
       <span class="row-left">
         <span v-if="!priorityRow" class="indent" :style="{ width: depth * 20 + 'px' }" aria-hidden="true"></span>
+        <span class="node-icon" aria-hidden="true">{{ isLeaf ? '\u2022' : '\u25BE' }}</span>
         <span
           v-if="priorityChip"
           :class="['priority-chip', { 'priority-none': priority === null, 'priority-p0': priority === 0, 'priority-p1': priority === 1 }]"
         >{{ priorityChip }}</span>
-        <span class="node-icon" aria-hidden="true">{{ isLeaf ? '\u2022' : '\u25BE' }}</span>
         <input
           v-if="!priorityRow && (editingName || !node.name)"
           :ref="(el) => onNameMounted(el as HTMLInputElement | null)"
