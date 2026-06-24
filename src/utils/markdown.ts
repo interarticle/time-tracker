@@ -61,6 +61,8 @@ export function generateDayMarkdown(dateKey: string): string {
   lines.push('> - **Committed** = fixed-duration obligations (meetings, etc.) set during planning')
   lines.push('> - **Planned** = flexible tasks with time limits')
   lines.push('> - **Buffer** = unstructured time (lunch, breaks, context switches)')
+  lines.push('> - **[DONE]** = leaf marked complete')
+  lines.push('> - **[DEPRIORITIZED]** = leaf set aside; its limit is treated as zero (original shown struck through)')
   lines.push('')
 
   // Summary
@@ -112,19 +114,25 @@ export function generateDayMarkdown(dateKey: string): string {
         const prefix = '  '.repeat(indent) + '- '
         const ms = getLeafMs(node, timers)
         const limit = getSubtreeLimitMs(node)
-        const completed = node.completed ? ' [DONE]' : ''
+        const isDeprioritized = node.children.length === 0 && !!node.deprioritized
+        const status = node.completed ? ' [DONE]' : isDeprioritized ? ' [DEPRIORITIZED]' : ''
 
         let detail = formatMs(ms)
         // Percentage of day (only at root level or if meaningful)
         if (indent === 0 && grandTotal > 0) {
           detail += ` (${Math.round((ms / grandTotal) * 100)}% of day)`
         }
-        if (limit !== null) {
+        if (isDeprioritized) {
+          // Limit is treated as zero; show the original (struck through) for context.
+          if (node.timeLimitMs !== null) {
+            detail += ` / limit ~~${formatMs(node.timeLimitMs)}~~ → ${formatMs(0)}`
+          }
+        } else if (limit !== null) {
           detail += ` / limit ${formatMs(limit)}`
           if (ms > limit) detail += ' OVER'
         }
 
-        lines.push(`${prefix}**${node.name || '(unnamed)'}**${completed} — ${detail}`)
+        lines.push(`${prefix}**${node.name || '(unnamed)'}**${status} — ${detail}`)
         if (node.children.length > 0) {
           renderTasks(node.children, indent + 1)
         }
