@@ -181,6 +181,23 @@ export function formatDateDisplay(dateKey: string): string {
   })
 }
 
+/** Start of the week (Sunday) containing the given date, as a date key. */
+export function getWeekStart(dateKey: string): string {
+  const parts = dateKey.split('-').map(Number)
+  const date = new Date(parts[0]!, parts[1]! - 1, parts[2]!)
+  date.setDate(date.getDate() - date.getDay()) // Sunday = 0
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+/** Short "Sun M/D – Sat M/D" label for the week beginning at the given Sunday. */
+export function formatWeekRange(weekStartKey: string): string {
+  const md = (key: string) => {
+    const p = key.split('-').map(Number)
+    return `${p[1]}/${p[2]}`
+  }
+  return `${md(weekStartKey)} – ${md(addDays(weekStartKey, 6))}`
+}
+
 export function addDays(dateKey: string, days: number): string {
   const parts = dateKey.split('-').map(Number)
   const date = new Date(parts[0]!, parts[1]! - 1, parts[2]!)

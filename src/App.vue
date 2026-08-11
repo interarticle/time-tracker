@@ -10,6 +10,7 @@ import CommittedSection from '@/components/CommittedSection.vue'
 import PlanningInfoBar from '@/components/PlanningInfoBar.vue'
 import CategoryBreakdown from '@/components/CategoryBreakdown.vue'
 import CopyOverlay from '@/components/CopyOverlay.vue'
+import WeeklyPlanPanel from '@/components/WeeklyPlanPanel.vue'
 
 const tracker = useTimeTracker()
 const planning = usePlanning(tracker.currentDateKey, tracker)
@@ -133,6 +134,9 @@ function importData() {
 // --- Priority view toggle (not persisted) ---
 const priorityView = ref(false)
 
+// Anchor element the weekly-plan panel docks against (the centred column)
+const appEl = ref<HTMLElement | null>(null)
+
 // --- Planning dialog ---
 const showPlanningDialog = ref(false)
 const planningLimitInput = ref('')
@@ -158,7 +162,7 @@ function disablePlanningAndClose() {
 </script>
 
 <template>
-  <div class="app">
+  <div ref="appEl" class="app">
     <header class="header">
       <h1>Time Tracker</h1>
       <DateNav />
@@ -210,6 +214,9 @@ function disablePlanningAndClose() {
     </main>
     <footer class="build-info">{{ buildInfo }}</footer>
   </div>
+
+  <!-- Weekly plan: docked to the right of the centred column -->
+  <WeeklyPlanPanel :anchor-el="appEl" />
 
   <!-- Planning dialog -->
   <Teleport to="body">

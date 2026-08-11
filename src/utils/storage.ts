@@ -1,10 +1,11 @@
-import type { TaskTreeData, DayTimerState, MetaData, PlanningSettings, PlanningDayData } from '@/types'
+import type { TaskTreeData, DayTimerState, MetaData, PlanningSettings, PlanningDayData, WeeklyPlanData } from '@/types'
 
 const TREE_PREFIX = 'tt:tree:'
 const DAY_PREFIX = 'tt:day:'
 const META_KEY = 'tt:meta'
 const PLANNING_KEY = 'tt:planning'
 const PLAN_PREFIX = 'tt:plan:'
+const WEEK_PREFIX = 'tt:week:'
 
 export function loadTree(dateKey: string): TaskTreeData {
   try {
@@ -78,4 +79,23 @@ export function loadPlanningDay(dateKey: string): PlanningDayData {
 
 export function savePlanningDay(dateKey: string, data: PlanningDayData): void {
   localStorage.setItem(PLAN_PREFIX + dateKey, JSON.stringify(data))
+}
+
+/** Weekly plan, keyed by the week's Sunday date key. */
+export function loadWeeklyPlan(weekStartKey: string): WeeklyPlanData {
+  try {
+    const raw = localStorage.getItem(WEEK_PREFIX + weekStartKey)
+    if (raw) return JSON.parse(raw)
+  } catch {
+    // ignore
+  }
+  return { markdown: '' }
+}
+
+export function saveWeeklyPlan(weekStartKey: string, data: WeeklyPlanData): void {
+  if (data.markdown.trim() === '') {
+    localStorage.removeItem(WEEK_PREFIX + weekStartKey)
+    return
+  }
+  localStorage.setItem(WEEK_PREFIX + weekStartKey, JSON.stringify(data))
 }

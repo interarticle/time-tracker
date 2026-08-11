@@ -55,6 +55,11 @@ export interface PlanningSettings {
   lastDailyLimitMs?: number
 }
 
+/** Free-form markdown weekly plan, keyed by the week's Sunday date key. */
+export interface WeeklyPlanData {
+  markdown: string
+}
+
 export interface TimeTracker {
   // Date navigation
   currentDateKey: Ref<string>
